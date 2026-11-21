@@ -1,0 +1,7 @@
+@AGENTS.md
+
+# Honest Hours
+
+- **Start of every session:** read [TODO.md](TODO.md) (progress + next step), then the relevant sections of [PLAN.md](PLAN.md).
+- **When a step is finished:** tick it in TODO.md, update "Current status" and "Last updated".
+- Never print or commit `.env.local` (contains the database password).

@@ -2,7 +2,7 @@
 
 An honest coach for where your hours go. Laptop-only PWA that tracks your day, calls out wasted time, and turns free time into study time.
 
-- Plan: [PLAN.md](PLAN.md) (build checklist in §14)
+- Plan: [PLAN.md](PLAN.md) · Progress: [TODO.md](TODO.md)
 - Design: [design-system/](design-system/DESIGN_SYSTEM.md) (Clean) · [design-system-v2/](design-system-v2/DESIGN_SYSTEM.md) (Notebook)
 
 ## Run locally

@@ -1,6 +1,6 @@
 # Honest Hours — Project Plan
 
-> Status: **Building v1.** Steps 0–2 done (project setup, app shell, database). See §14.
+> Status: **Building v1.** Progress and next steps: [TODO.md](TODO.md).
 > Last updated: 2026-11-21
 
 ---
@@ -673,27 +673,6 @@ Use freeze    = automatic when a day ends unmet and a freeze is available
 
 ---
 
-## 14. v1 build checklist
+## 14. Build progress
 
-| # | Step | Check | Status |
-|---|---|---|---|
-| 0 | Next.js 16 + TypeScript + Tailwind v4, design tokens, fonts, git | `npm run build` passes; Sage & Paper look in light + dark | ✅ |
-| 1 | App shell: brand, status bar, sidebar, main panel, 6 page routes | Page never scrolls at 1366×768; keys 1–6 switch pages; icon rail < 1440px | ✅ |
-| 2 | Supabase schema (§10), RLS, no-overlap rule, default categories on sign-up | User A can't read B's rows; overlapping entries rejected (`node scripts/db-test.mjs <CODE>`, 23 checks) | ✅ |
-| 3 | Auth: email + password, invite code, display name | Wrong code fails; logged-out users go to /login | |
-| 4 | Time logic in `lib/`: 3 AM day, timezones, Unknown gaps, split slots | Unit tests around midnight and 3 AM | |
-| 5 | Check-in popup: interval, split, Same as before, tags, questions | Away 70 min → next check-in covers 70 min | |
-| 6 | Busy mode, Going to sleep / I'm awake, late-night go-quiet | No popups while busy/asleep; block filled after | |
-| 7 | Weekday/weekend schedule, Office day one-tap, 2-hour office popup | One tap creates walk/bus/office/commute-back | |
-| 8 | Timeline: day picker, edit blocks, fill Unknown | Filled gap saved with `source = backfill` | |
-| 9 | Today dashboard: greeting, free time, free time left, ribbon, tracking % | Numbers match a hand calculation | |
-| 10 | Settings: categories & questions, popups & schedule, presets, account | New category appears in the popup | |
-| 11 | PWA install + Vercel deploy | Installs as own window; works on live URL | |
-
-**Build notes**
-- UI uses the design system's own CSS classes (`src/styles/components.css`, ported from `preview.html`) instead of shadcn's styling, so the Notebook skin (`notebook.css`) can override the same classes later.
-- **Supabase:** project in Mumbai (`ap-south-1`). Schema lives in `supabase/migrations/`; apply with `npx supabase db push --remote=<SUPABASE_DB_URL>`. Invite codes are added with SQL (`insert into invite_codes ...`); nobody can read them through the API.
-- **Sign-up:** a trigger on `auth.users` checks the invite code + display name (1–20 chars) and creates the profile, 11 default categories, 16 questions and the "Office day" routine. Create accounts only through the app (dashboard-created users fail the invite check).
-- **Changes from §3 agreed during build:** "Wake up" is not a category (it's the "I'm awake" button → `day_logs`); Movie / Series also asks "Planned?" (otherwise every movie counts as wasted); new question type `number` for phone checks.
-- Category kind for entertainment is `fun` in the CSS (`data-kind="fun"`); the database uses `entertainment`. Map one to the other in code.
-
+Tracked in **[TODO.md](TODO.md)**: what's done, the next step, the v1 checklist with checks, and build notes.
