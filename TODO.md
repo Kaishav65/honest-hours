@@ -2,9 +2,9 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-21 (Step 9 coded)
+> Last updated: 2026-11-21 (Step 10 coded)
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–9 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 10 — Settings.**
+**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 11 — Install & deploy (PWA + Vercel).**
 
 ---
 
@@ -113,11 +113,18 @@ Each step has a check that proves it works.
 - [x] All formulas in `src/lib/insights/today.ts` (pure, 10 unit tests with a hand-calculated day); styles ported from the design system into `components.css`
 - Verified: lint + build + 57 tests; browser test (Chrome via Playwright, 1366×768, no page scroll, no console errors): after one Office day tap the numbers match (Office 8h, Commute 1h 20m, 0 study, tracked % = logged ÷ minutes passed)
 - **Still to check by hand:** a day with study + Instagram (wasted / free time tiles), dark mode, 1920×1080
-- Known limits: no coach card, streak or "today's one goal" yet (v2); "While doing" tags aren't counted in the tiles
+- Known limits: "While doing" tags aren't counted in the tiles; "free time left" shows "N needed of 0 possible" once you're past your usual sleep time
+- **Left for v2 (in the design but not built on Today):** Coach card with messages; streak + freeze on the Study tile and status bar; "Today's one goal" note (from the morning plan); goal on-track badge ("Close · 92% at usual pace", needs 7+ days of data); "Entries" recent-list card on wide screens (≥ 86rem); "While doing" line under Where time went (YouTube during Dinner, not counted twice); focus/discipline scores
 
-### Step 10 — Settings
-- [ ] Tabs: Categories & questions / Popups & schedule / Busy presets / Account (display name, password) / theme
-- **Check:** a new category appears in the check-in popup
+### Step 10 — Settings (code done, manual check pending)
+- [x] **Categories & questions:** add a category (name, kind, counts-as, icon from 19), edit name / counts-as / icon, archive or restore (never deleted); per category add questions (type, options for pick-one/several) and remove or restore them; built-in questions are marked
+- [x] **Popups & schedule:** check-in interval (15/30/45/60), day start hour, weekday and weekend study goals (hours; past days keep their snapshot), office hours per day type (on/off, from–to, popup every 1 / 1.5 / 2 / 3 h)
+- [x] **Busy presets:** add, rename, change minutes, remove (max 10); shown in the Busy popup
+- [x] **Account:** display name (1–20), change password (re-checks the current password first), theme Light / Dark / Match my computer
+- All saves go straight to Supabase from the browser (RLS keeps them to your own rows) and then refresh the page data, so popups and other pages see the change; `profiles.settings` is saved whole so nothing is dropped
+- Verified: lint + build; browser test (Chrome via Playwright): new category + question shows up in the L popup and saves; duplicate name rejected; interval 15 / weekend goal 5 h saved (Today shows 12 pomodoros = 300 ÷ 25); preset saved and listed in Busy; name change shows in the greeting; wrong current password rejected, right one changes it; dark theme applies; DB values checked, test users deleted
+- **Still to check by hand:** archive a category (disappears from the popup, still shows on old entries); weekend office hours really switch the popup to 2-hourly; editing an existing question; long category lists scroll inside the panel
+- Known limits: kind can't be changed after creating a category (scores depend on it); question labels can't be renamed (remove and re-add); no "Delete my account" yet; Look (Clean / Notebook) is v2; timezone is shown but not editable; no coach / streak / strictness settings until v2
 
 ### Step 11 — Install & deploy
 - [ ] PWA manifest + icons (installs as its own window)
@@ -129,6 +136,8 @@ Each step has a check that proves it works.
 ## Later
 
 ### v2 — Focus & coaching
+- [ ] Today page extras: coach card, streak on the Study tile, "today's one goal", goal on-track badge, recent-entries card, "while doing" line (details under Step 9)
+- [ ] Settings extras: Coach strictness, Streak & goals, Look (Clean / Notebook), "Delete my account", edit category kind / rename questions
 - [ ] Pomodoro (auto-logs study; focus, phone checks, completed/stopped early)
 - [ ] Configurable streak + earned freeze
 - [ ] Morning plan / evening review
