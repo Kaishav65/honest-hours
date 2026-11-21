@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { NAV_ITEMS } from "./nav-items";
 
 function isTyping(target: EventTarget | null) {
@@ -10,7 +10,7 @@ function isTyping(target: EventTarget | null) {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-export function Sidebar() {
+export function Sidebar({ footer }: { footer: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -42,18 +42,7 @@ export function Sidebar() {
         </Link>
       ))}
       <div className="sidebar-foot">
-        {/* Display name + coach strictness come from the profile after login (step 3). */}
-        <div className="user">
-          <div className="avatar" aria-hidden>
-            ?
-          </div>
-          <div className="who">
-            <div className="sm" style={{ fontWeight: 600 }}>
-              My account
-            </div>
-            <div className="xs muted">Balanced coach</div>
-          </div>
-        </div>
+        {footer}
       </div>
     </nav>
   );

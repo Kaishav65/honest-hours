@@ -228,7 +228,7 @@ Not a cheerleader. **Call out the bad, appreciate the good, always show the way 
 
 ### Login
 - **Real email + password**, with **email confirmation turned off**, so no emails are sent and Supabase's email limit doesn't apply.
-- **Invite code** required at sign-up (site is public; only invited people can join).
+- **Open sign-up, capped at 50 users** (no invite code). Delete inactive users every ~6 months to free slots.
 - Forgot password: admin resets it from the Supabase dashboard for now.
 - **Later (optional):** email reset links via Resend (free, 100 emails/day), and a Google sign-in button.
 - Do **not** write our own login code: Supabase handles password storage, sessions, and security.
@@ -249,7 +249,7 @@ Not a cheerleader. **Call out the bad, appreciate the good, always show the way 
 ## 8. Build phases
 
 ### v1: Core
-- Email + password login with invite code
+- Email + password login (open sign-up, 50-user cap)
 - Categories + their questions (editable)
 - Check-in popup (configurable interval), split-slot, "Same as before", while-doing tags
 - Busy mode + presets
@@ -321,7 +321,7 @@ Both designs are kept, and the user picks one in **Settings → Look**.
 ### Pages
 | Page | Contents | Phase |
 |---|---|---|
-| Login / Sign up | Email, password; on sign-up also **"What should we call you?"** (display name, max 20 chars) + invite code | v1 |
+| Login / Sign up | Email, password; on sign-up also **"What should we call you?"** (display name, max 20 chars) | v1 |
 | **Today** (home) | Greeting with display name ("Good evening, {name}."), Free time card, study goal + streak, free time left, 24h timeline bar, coach messages, where time went | v1 (coach v2) |
 | Timeline | Day picker; list of blocks; click to edit; click grey Unknown to fill | v1 |
 | Focus | Pomodoro timer, subject picker, today's sessions | v2 |
@@ -376,7 +376,7 @@ categories   subjects      entries ◀─────── pomodoros     day_lo
    │                     (the core)
    ▼                         │
 category_questions           ▼
-                        entry_tags          checkins       routines      invite_codes
+                        entry_tags          checkins       routines
 ```
 
 | Table | Key columns | Purpose |
@@ -392,7 +392,6 @@ category_questions           ▼
 | `day_logs` | user_id, day, **study_goal_min (snapshot)**, planned_study_min, wake_at, sleep_quality, tomorrow_goal, review_done, freeze_earned, freeze_used | One row per user per day |
 | `coach_messages` | user_id, rule_key, severity (scold / praise / recovery / pattern), text, created_at, seen_at, **acted_on** | Escalation count, no repeats, which nudges actually work |
 | `routines` | user_id, name, items (list of category + time + duration) | One-tap templates like "Office day" |
-| `invite_codes` | code, max_uses, used_count, active | Sign-up control |
 
 ### Data rules agreed
 - **Unknown time** counts as **neutral** (not wasted) but stays **visible**, with a small penalty on tracking completeness.

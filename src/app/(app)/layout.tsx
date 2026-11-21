@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { Sprout } from "lucide-react";
+import { UserBadge } from "@/components/shell/user-badge";
 import { Sidebar } from "@/components/shell/sidebar";
 import { StatusBar } from "@/components/shell/status-bar";
 
@@ -13,7 +15,13 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         <span className="brand-name">Honest Hours</span>
       </div>
       <StatusBar />
-      <Sidebar />
+      <Sidebar
+        footer={
+          <Suspense>
+            <UserBadge />
+          </Suspense>
+        }
+      />
       <main className="main">{children}</main>
     </div>
   );

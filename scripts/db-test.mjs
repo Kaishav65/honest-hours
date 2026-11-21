@@ -1,5 +1,5 @@
 // Checks the database rules from PLAN.md §10 against the live Supabase project.
-//   node scripts/db-test.mjs <INVITE_CODE>
+//   node scripts/db-test.mjs
 // Creates 2 test users (test-a-*/test-b-*@example.com). Delete them afterwards in
 // Supabase → Authentication → Users; their data is removed with them.
 
@@ -13,8 +13,6 @@ const env = Object.fromEntries(
 );
 const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const CODE = process.argv[2];
-if (!CODE) throw new Error("Usage: node scripts/db-test.mjs <INVITE_CODE>");
 
 let failed = 0;
 function check(name, ok, detail = "") {
@@ -47,20 +45,15 @@ const emailA = `test-a-${stamp}@example.com`;
 const emailB = `test-b-${stamp}@example.com`;
 
 // --- Sign-up rules ---
-const bad = await signUp(`test-bad-${stamp}@example.com`, { display_name: "Bad", invite_code: "WRONG-CODE" });
-check("Sign-up with a wrong invite code is rejected", bad.status >= 400, JSON.stringify(bad.json));
-
-const noName = await signUp(`test-noname-${stamp}@example.com`, { display_name: "", invite_code: CODE });
+const noName = await signUp(`test-noname-${stamp}@example.com`, { display_name: "" });
 check("Sign-up without a display name is rejected", noName.status >= 400, JSON.stringify(noName.json));
 
-const anonCheck = await call("/rest/v1/rpc/check_invite_code", { method: "POST", body: { p_code: CODE } });
-check("check_invite_code(valid) = true", anonCheck.json === true, JSON.stringify(anonCheck.json));
-const anonCheckBad = await call("/rest/v1/rpc/check_invite_code", { method: "POST", body: { p_code: "WRONG-CODE" } });
-check("check_invite_code(wrong) = false", anonCheckBad.json === false, JSON.stringify(anonCheckBad.json));
+const open = await call("/rest/v1/rpc/signups_open", { method: "POST", body: {} });
+check("signups_open() = true while under the 50-user cap", open.json === true, JSON.stringify(open.json));
 
-const a = await signUp(emailA, { display_name: "Tester A", invite_code: CODE.toLowerCase(), timezone: "Asia/Kolkata" });
-const b = await signUp(emailB, { display_name: "Tester B", invite_code: CODE });
-check("Sign-up with a valid code works (code is case-insensitive)", !!a.json.access_token, JSON.stringify(a.json));
+const a = await signUp(emailA, { display_name: "Tester A", timezone: "Asia/Kolkata" });
+const b = await signUp(emailB, { display_name: "Tester B" });
+check("Sign-up works without an invite code", !!a.json.access_token, JSON.stringify(a.json));
 check("Second user signs up", !!b.json.access_token, JSON.stringify(b.json));
 if (!a.json.access_token || !b.json.access_token) {
   console.log(`\n${failed} check(s) failed. Stopping: no test users.`);
@@ -114,10 +107,6 @@ const bDel = await call(`/rest/v1/entries?id=eq.${e1.json[0]?.id}`, { token: B, 
 check("User B can't delete A's entry", Array.isArray(bDel.json) && bDel.json.length === 0, JSON.stringify(bDel.json));
 
 // --- Locked-down areas ---
-const anonCodes = await call("/rest/v1/invite_codes?select=code");
-check("Logged-out visitor can't read invite codes", anonCodes.status >= 400 || anonCodes.json.length === 0, JSON.stringify(anonCodes.json));
-const userCodes = await call("/rest/v1/invite_codes?select=code", { token: A });
-check("Logged-in user can't read invite codes", userCodes.status >= 400 || userCodes.json.length === 0, JSON.stringify(userCodes.json));
 const anonEntries = await call("/rest/v1/entries?select=id");
 check("Logged-out visitor can't read entries", anonEntries.status >= 400 || anonEntries.json.length === 0, JSON.stringify(anonEntries.json));
 const seed = await call("/rest/v1/rpc/seed_defaults", { token: A, method: "POST", body: { p_user: idA } });

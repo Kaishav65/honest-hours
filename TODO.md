@@ -4,7 +4,7 @@
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
 > Last updated: 2026-11-21
 
-**Current status:** v1 steps 0–2 done. **Next: Step 3 — Login & sign-up.**
+**Current status:** v1 steps 0–2 and 4 done; Step 3 code done (still needs your manual sign-up/login check). **Next: Step 5 — Check-in popup.**
 
 ---
 
@@ -23,7 +23,7 @@
   - Confirm email **off** (no emails sent), Secure email change off, Require current password on, min password 8, magic links off
 - [x] GitHub repo (public): https://github.com/Kaishav65/honest-hours (branch `main`)
 - [x] GitHub CLI installed and logged in (`C:\Program Files\GitHub CLI\gh.exe`)
-- [x] First invite code created (10 uses) — value is in the database only, not in this repo
+- [x] Invite codes removed (2026-11-21): open sign-up with a hard cap of 50 users
 
 ### Step 0 — Project setup
 - [x] Next.js 16.4 (App Router, Cache Components) + TypeScript + Tailwind v4 + lucide-react
@@ -40,9 +40,9 @@
 ### Step 2 — Database
 - [x] Migration `supabase/migrations/20261121000000_init.sql` applied
 - [x] 12 tables, RLS (own rows only), no-overlap rule for entries, composite FKs (can't link another user's rows)
-- [x] Sign-up trigger: checks invite code + display name, creates profile, 11 categories, 16 questions, "Office day" routine
-- [x] `check_invite_code()` RPC for the sign-up form
-- Verified: `node scripts/db-test.mjs <INVITE_CODE>` → 23/23 checks pass; Supabase advisors: no issues
+- [x] Sign-up trigger: checks display name + 50-user cap, creates profile, 11 categories, 16 questions, "Office day" routine
+- [x] `signups_open()` RPC for the sign-up form (migration `20261121120000_open_signup_user_cap.sql`; `invite_codes` table dropped)
+- Verified: `node scripts/db-test.mjs` → 21/21 checks pass; Supabase advisors: no issues
 
 ---
 
@@ -50,23 +50,25 @@
 
 Each step has a check that proves it works.
 
-### Step 3 — Login & sign-up ⬅ NEXT
-- [ ] `npm install @supabase/supabase-js @supabase/ssr`
-- [ ] Supabase clients: browser + server helpers in `src/lib/supabase/`
-- [ ] Session refresh in **`src/proxy.ts`** (Next 16 renamed middleware → proxy; read `node_modules/next/dist/docs/` first)
-- [ ] `/login` page: email + password
-- [ ] `/signup` page: email, password, "What should we call you?" (1–20 chars), invite code (live check with `check_invite_code`), timezone sent automatically
-- [ ] Friendly errors: wrong invite code, name missing, email already used, weak password
-- [ ] Logged-out users → `/login`; logged-in users on `/login` → `/today`
-- [ ] Sidebar shows display name + avatar initial; Log out button
-- **Check:** wrong code fails; right code creates account + defaults; logout → redirected to `/login`
+### Step 3 — Login & sign-up (code done, manual check pending)
+- [x] `npm install @supabase/supabase-js @supabase/ssr`
+- [x] Supabase clients: browser + server helpers in `src/lib/supabase/`
+- [x] Session refresh in **`src/proxy.ts`** (Next 16 renamed middleware → proxy; read `node_modules/next/dist/docs/` first)
+- [x] `/login` page: email + password
+- [x] `/signup` page: email, password, "What should we call you?" (1–20 chars), timezone sent automatically ("full" message at 50 users)
+- [x] Friendly errors: name missing, email already used, weak password
+- [x] Logged-out users → `/login`; logged-in users on `/login` → `/today`
+- [x] Sidebar shows display name + avatar initial; Log out button
+- Verified so far: lint + build pass; logged-out `/today` and `/` → `/login`; db-test passes after removing invite codes
+- **Still to check by hand:** sign-up creates account + defaults; logout → `/login`; logged-in `/login` → `/today`
+- **Check:** sign-up creates account + defaults; logout → redirected to `/login`
 
-### Step 4 — Time logic (`src/lib/time/`)
+### Step 4 — Time logic (`src/lib/time/`) ✅
 - [x] Node 24 LTS installed (via nvm) and Vitest added
-- [ ] Add `"test": "vitest run"` script
-- [ ] Day boundary at `day_start_hour` (3 AM), user timezone, weekday/weekend day type
-- [ ] Find Unknown gaps between entries; split a slot into parts
-- **Check:** unit tests around midnight, 3 AM and day-type changes
+- [x] `"test": "vitest run"` script
+- [x] Day boundary at `day_start_hour` (3 AM), user timezone, weekday/weekend day type (`day.ts`, `zone.ts`; Intl only, DST-safe)
+- [x] Find Unknown gaps between entries (`findGaps`); split a slot into parts (`splitSlot`) (`slots.ts`)
+- Verified: 16 unit tests pass (midnight, 3 AM, day-type changes, gaps, splits, DST). **Run tests from PowerShell** (`npm test`); from Git Bash the `/c/...` path makes Vitest fail with "failed to find the current suite"
 
 ### Step 5 — Check-in popup
 - [ ] Timer from saved timestamps (background tabs throttle timers), interval from profile
@@ -131,7 +133,7 @@ Each step has a check that proves it works.
 - **Secrets:** `.env.local` (git-ignored) has `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_DB_URL` (session pooler, contains the DB password). Never print or commit it.
 - **DB changes:** add a new file in `supabase/migrations/` (`YYYYMMDDHHMMSS_name.sql`), then
   `npx supabase db push --remote="$SUPABASE_DB_URL" --yes`. One-off SQL: `npx supabase db query --remote="$SUPABASE_DB_URL" --yes "<sql>"`.
-- **Invite codes:** `insert into public.invite_codes (code, max_uses, note) values ('HH-XXXXXXXX', 5, 'who');` Users must sign up through the app (dashboard-created users fail the invite check).
+- **Users:** sign-up is open but capped at 50 users (in `private.handle_new_user` and `signups_open()`). Free slots by deleting inactive users in Supabase → Authentication → Users. Users must sign up through the app (dashboard-created users have no display name and fail).
 - **Styling:** use the design system classes in `src/styles/components.css` (`.btn`, `.card`, `.chip`, …), not shadcn styling, so the Notebook skin can override them later.
 - **Changes from PLAN §3:** no "Wake up" category ("I'm awake" button instead); Movie / Series asks "Planned?"; question type `number` for phone checks.
 - **Next.js 16:** APIs differ from older versions; read `node_modules/next/dist/docs/` before using a new API (see [AGENTS.md](AGENTS.md)).
