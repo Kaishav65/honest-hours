@@ -4,7 +4,7 @@
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
 > Last updated: 2026-11-21
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5 are coded and need your manual check in the browser. **Next: Step 6 — Busy mode & sleep** (after the manual checks).
+**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5 and 6 are coded and need your manual check in the browser. **Next: Step 7 — Schedules & Office day** (after the manual checks).
 
 ---
 
@@ -79,12 +79,14 @@ Each step has a check that proves it works.
 - **Still to check by hand:** popup opens when due; Save creates entries; split 20 + 10 min; away 70 min → slot covers the full 70 min; Skip waits another interval; notification appears with the tab in the background
 - Known limits: popups only while `status = normal` (Busy/Sleep in step 6); the first-ever slot starts when the app first loads; secondary saves (tags, check-in row) log to the console if they fail
 
-### Step 6 — Busy mode & sleep
-- [ ] Busy: 30 min / 1 h / 2 h / until time / presets; no popups; block filled on end
-- [ ] "Going to sleep" / "I'm awake" (sleep quality + today's study plan → `day_logs`)
-- [ ] Late-night go-quiet: 2 unanswered popups → quiet, ask "When did you sleep?" next morning
-- [ ] Status bar shows live state
-- **Check:** no popups while busy/asleep; block filled afterwards
+### Step 6 — Busy mode & sleep (code done, manual check pending)
+- [x] Busy: 30 min / 1 h / 2 h / until a time / your presets (from `profiles.settings.busy_presets`) + optional label; no popups while busy; when it ends (or "End busy") the check-in opens for the whole block, titled "Busy: <label>"
+- [x] "Going to sleep" (one tap) / "I'm awake" → saves a Sleep entry (`source = sleep_button`) and asks sleep quality + today's study plan → `day_logs` (goal snapshot kept if the day already has a row). The "I'm awake" popup also opens by itself when the app loads while sleeping
+- [x] Late-night go-quiet: a popup unanswered for a whole interval is recorded as `missed`; 2 missed in a row between 22:00 and day start → status `sleeping` (`status_label = auto-quiet`); next morning asks "When did you sleep?"
+- [x] Status bar shows live state (Now: Tracking / Busy · until / Sleeping · since) and swaps its buttons
+- Verified: lint + build + 30 unit tests (clock helpers, late-night rule); database side checked with a throwaway user (status updates, sleep entry, day_logs insert/update, missed check-in, invalid status rejected)
+- **Still to check by hand:** Busy 30 min → no popups, then block popup at the end; "End busy" early; Going to sleep → no popups; I'm awake → Sleep entry + quality/plan saved; reload while sleeping → "Good morning" popup; ignore 2 popups late at night → goes quiet
+- Known limits: an unanswered popup closes after one interval even if you were mid-way through filling it in; time before "Going to sleep" that was never logged stays Unknown (fill it from the Timeline in step 8); busy blocks are saved as normal check-ins (`source = checkin`)
 
 ### Step 7 — Schedules & Office day
 - [ ] Weekday/weekend settings; during office hours popups every 2 h asking "Office as usual?"

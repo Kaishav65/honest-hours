@@ -71,3 +71,35 @@ describe("answers <-> entry columns", () => {
     expect(fieldsToAnswers(questions, answersToFields(questions, answers))).toEqual(answers);
   });
 });
+
+import { busyEndMs, clockOf, isLateNight, lastClockOccurrence, nextClockOccurrence, parseClock } from "./status";
+
+describe("busy / sleep helpers", () => {
+  it("parses clock strings", () => {
+    expect(parseClock("23:30")).toEqual({ h: 23, m: 30 });
+    expect(parseClock("24:00")).toBeNull();
+    expect(parseClock("")).toBeNull();
+  });
+  it("when did you sleep: 11:30 PM said at 7 AM means last night", () => {
+    expect(lastClockOccurrence("23:30", at(7, 0), IST)).toBe(at(23, 30, 20));
+  });
+  it("when did you sleep: 1:00 AM said at 7 AM means earlier today", () => {
+    expect(lastClockOccurrence("01:00", at(7, 0), IST)).toBe(at(1, 0));
+  });
+  it("busy until 3:30 PM said at 4 PM means tomorrow; said at 2 PM means today", () => {
+    expect(nextClockOccurrence("15:30", at(16, 0), IST)).toBe(at(15, 30, 22));
+    expect(nextClockOccurrence("15:30", at(14, 0), IST)).toBe(at(15, 30));
+  });
+  it("busy preset adds minutes", () => {
+    expect(busyEndMs(at(10, 0), 60)).toBe(at(11, 0));
+  });
+  it("clockOf prefills inputs in the user's zone", () => {
+    expect(clockOf(at(23, 5), IST)).toBe("23:05");
+  });
+  it("late night is 10 PM until the day starts", () => {
+    expect(isLateNight(at(23, 0), IST, 3)).toBe(true);
+    expect(isLateNight(at(2, 59), IST, 3)).toBe(true);
+    expect(isLateNight(at(3, 0), IST, 3)).toBe(false);
+    expect(isLateNight(at(15, 0), IST, 3)).toBe(false);
+  });
+});

@@ -15,6 +15,8 @@ type Props = {
   startMs: number;
   endMs: number;
   timeZone: string;
+  /** Shown under the title, e.g. "Busy: Interview". */
+  subtitle?: string;
   categories: Category[];
   questions: Question[];
   lastEntry: LastEntry | null;
@@ -129,6 +131,7 @@ export function CheckinModal(p: Props) {
             What did you do since {formatClock(p.startMs, p.timeZone)}?
           </h2>
           <p className="sm muted">
+            {p.subtitle ? `${p.subtitle} · ` : ""}
             {duration(total)} · until {formatClock(p.endMs, p.timeZone)}
           </p>
         </div>

@@ -1,20 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { answersToFields } from "@/lib/checkin/answers";
 import { floorToMinute, nextDueMs, slotStartMs } from "@/lib/checkin/schedule";
-import { formatClock, onLogNow, setCheckinStatus } from "@/lib/checkin/store";
+import {
+  busyEndMs,
+  isLateNight,
+  lastClockOccurrence,
+  nextClockOccurrence,
+  QUIET_AFTER_MISSED,
+} from "@/lib/checkin/status";
+import { formatClock, onCommand, setCheckinStatus, type Mode } from "@/lib/checkin/store";
 import type { Answers, Category, LastEntry, Question } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/client";
-import { splitSlot } from "@/lib/time";
+import { dayOf, splitSlot } from "@/lib/time";
+import { BusyModal, type BusyChoice, type BusyPreset } from "./busy-modal";
 import { CheckinModal, type SavePart } from "./checkin-modal";
+import { WakeModal, type WakeInput } from "./wake-modal";
 
 type Props = {
+  userId: string;
   timeZone: string;
   dayStartHour: number;
   intervalMin: number;
-  /** profiles.status: popups only appear while "normal" (busy / sleep arrive in step 6). */
+  /** profiles.status. Popups only appear while "normal". "pomodoro" arrives in v2. */
   status: string;
+  statusSinceMs: number | null;
+  statusUntilMs: number | null;
+  statusLabel: string | null;
+  weekdayGoalMin: number;
+  weekendGoalMin: number;
+  busyPresets: BusyPreset[];
   categories: Category[];
   questions: Question[];
   lastEndMs: number | null;
@@ -22,47 +38,89 @@ type Props = {
   lastAnswers: Record<string, Answers>;
 };
 
-type Prompt = { startMs: number; endMs: number; promptedAt: number };
+type Prompt = { startMs: number; endMs: number; promptedAt: number; subtitle?: string };
+type Status = Mode["status"];
+
+// Written to profiles.status_label when the app went quiet by itself (we don't know when sleep began).
+const AUTO_QUIET = "auto-quiet";
 
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-// Owns the check-in timer and popup. All timing comes from saved timestamps, not from counting
-// timers, because background tabs throttle timers: after 70 minutes away the next check-in covers 70 minutes.
+const toStatus = (s: string): Status => (s === "busy" || s === "sleeping" ? s : "normal");
+
+// Owns the check-in timer, the popups, and Busy / Sleep. All timing comes from saved timestamps, not
+// from counting timers, because background tabs throttle timers: after 70 minutes away the next
+// check-in covers 70 minutes.
 export function CheckinController(props: Props) {
-  const { timeZone, dayStartHour, intervalMin, status, categories, questions } = props;
+  const { userId, timeZone, dayStartHour, intervalMin, categories, questions } = props;
   const [slotStart, setSlotStart] = useState(() =>
     slotStartMs(props.lastEndMs, Date.now(), timeZone, dayStartHour),
   );
+  const [lastEndMs, setLastEndMs] = useState(props.lastEndMs);
   const [lastPrompt, setLastPrompt] = useState<number | null>(null);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [lastEntry, setLastEntry] = useState(props.lastEntry);
   const [lastAnswers, setLastAnswers] = useState(props.lastAnswers);
+  const [mode, setMode] = useState<Mode>({
+    status: toStatus(props.status),
+    label: props.statusLabel,
+    sinceMs: props.statusSinceMs,
+    untilMs: props.statusUntilMs,
+  });
+  // A night's sleep ends with the "I'm awake" popup, which opens by itself when the app loads while sleeping.
+  const [wakeOpen, setWakeOpen] = useState(props.status === "sleeping");
+  const [busyOpen, setBusyOpen] = useState(false);
+  const missedInARow = useRef(0);
   const [, bump] = useState(0);
 
   const due = nextDueMs(slotStart, lastPrompt, intervalMin);
-  const active = status === "normal";
+  const active = mode.status === "normal" && !wakeOpen && !busyOpen;
 
-  const openPrompt = useCallback(() => {
-    const now = Date.now();
-    const endMs = floorToMinute(now);
-    if (endMs - slotStart < 60_000) return;
-    setPrompt({ startMs: slotStart, endMs, promptedAt: now });
-    if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const n = new Notification("Honest Hours", {
-        body: `What did you do since ${formatClock(slotStart, timeZone)}?`,
-        tag: "hh-checkin",
-      });
-      n.onclick = () => window.focus();
-    }
-  }, [slotStart, timeZone]);
+  const openPrompt = useCallback(
+    (subtitle?: string) => {
+      const now = Date.now();
+      const endMs = floorToMinute(now);
+      if (endMs - slotStart < 60_000) return;
+      setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle });
+      if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const n = new Notification("Honest Hours", {
+          body: `What did you do since ${formatClock(slotStart, timeZone)}?`,
+          tag: "hh-checkin",
+        });
+        n.onclick = () => window.focus();
+      }
+    },
+    [slotStart, timeZone],
+  );
 
-  // Show the next-check-in time in the status bar.
+  async function updateStatus(next: Mode) {
+    const { error } = await createClient()
+      .from("profiles")
+      .update({
+        status: next.status,
+        status_since: next.sinceMs === null ? null : new Date(next.sinceMs).toISOString(),
+        status_until: next.untilMs === null ? null : new Date(next.untilMs).toISOString(),
+        status_label: next.label,
+      })
+      .eq("id", userId);
+    if (error) return "Couldn't save your status. Check your connection and try again.";
+    setMode({ status: next.status, label: next.label, sinceMs: next.sinceMs, untilMs: next.untilMs });
+    return null;
+  }
+
+  const recordCheckin = (promptedAt: number, status: "skipped" | "missed") =>
+    createClient()
+      .from("checkins")
+      .insert({ prompted_at: new Date(promptedAt).toISOString(), status })
+      .then(({ error }) => error && console.error(`Check-in (${status}) not recorded:`, error.message));
+
+  // Show the live state and next check-in time in the status bar.
   useEffect(() => {
-    setCheckinStatus({ nextDueMs: active ? due : null, timeZone });
-  }, [due, active, timeZone]);
+    setCheckinStatus({ nextDueMs: active ? due : null, timeZone, mode });
+  }, [due, active, timeZone, mode]);
 
   // Open the popup when due. Checked on a timer and whenever the tab becomes visible again.
   useEffect(() => {
@@ -79,23 +137,148 @@ export function CheckinController(props: Props) {
     };
   }, [prompt, active, due, openPrompt]);
 
-  // "Log now" button and L key.
+  // An open popup nobody answered for a whole interval counts as missed.
+  // Two missed in a row late at night = you're asleep: go quiet, ask "When did you sleep?" in the morning.
   useEffect(() => {
-    const open = () => {
-      if (!prompt) openPrompt();
+    if (!prompt) return;
+    const check = () => {
+      const now = Date.now();
+      if (now - prompt.promptedAt < intervalMin * 60_000) return;
+      recordCheckin(prompt.promptedAt, "missed");
+      missedInARow.current += 1;
+      setPrompt(null);
+      if (missedInARow.current >= QUIET_AFTER_MISSED && isLateNight(now, timeZone, dayStartHour)) {
+        missedInARow.current = 0;
+        updateStatus({ status: "sleeping", label: AUTO_QUIET, sinceMs: prompt.startMs, untilMs: null });
+      } else {
+        setLastPrompt(now);
+      }
+    };
+    const id = setInterval(check, 15_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateStatus/recordCheckin only use stable props
+  }, [prompt, intervalMin, timeZone, dayStartHour]);
+
+  // Busy ends by itself at its end time (also if the app was closed meanwhile): then log the block.
+  const endBusy = useCallback(async () => {
+    const label = mode.label;
+    const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
+    if (err) return;
+    setLastPrompt(null);
+    openPrompt(label ? `Busy: ${label}` : "Busy time");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateStatus only uses stable props
+  }, [mode.label, openPrompt]);
+
+  useEffect(() => {
+    if (mode.status !== "busy" || mode.untilMs === null) return;
+    const until = mode.untilMs;
+    const check = () => {
+      if (Date.now() >= until) endBusy();
+    };
+    check();
+    const id = setInterval(check, 15_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [mode.status, mode.untilMs, endBusy]);
+
+  // Commands from the status bar and the L key.
+  useEffect(() => {
+    const run = (command: string) => {
+      if (command === "log-now" && !prompt && mode.status === "normal") openPrompt();
+      if (command === "busy" && !prompt && mode.status === "normal") setBusyOpen(true);
+      if (command === "end-busy" && mode.status === "busy") endBusy();
+      if (command === "sleep" && !prompt && mode.status === "normal") {
+        updateStatus({ status: "sleeping", label: null, sinceMs: floorToMinute(Date.now()), untilMs: null });
+      }
+      if (command === "awake" && mode.status === "sleeping") setWakeOpen(true);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "l" || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
       if (document.querySelector("dialog[open]")) return;
-      open();
+      run("log-now");
     };
     window.addEventListener("keydown", onKey);
-    const off = onLogNow(open);
+    const off = onCommand(run);
     return () => {
       window.removeEventListener("keydown", onKey);
       off();
     };
-  }, [prompt, openPrompt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateStatus only uses stable props
+  }, [prompt, mode.status, openPrompt, endBusy]);
+
+  async function startBusy(choice: BusyChoice, label: string): Promise<string | null> {
+    const now = Date.now();
+    const since = floorToMinute(now);
+    const until =
+      "minutes" in choice ? busyEndMs(since, choice.minutes) : nextClockOccurrence(choice.untilClock, now, timeZone);
+    if (until === null || until <= since) return "Pick a valid end time.";
+    const err = await updateStatus({ status: "busy", label: label || null, sinceMs: since, untilMs: until });
+    if (!err) setBusyOpen(false);
+    return err;
+  }
+
+  async function wake(input: WakeInput): Promise<string | null> {
+    if (mode.status !== "sleeping" || mode.sinceMs === null) return null;
+    const supabase = createClient();
+    const now = Date.now();
+    const endMs = floorToMinute(now);
+
+    let sleepStart = mode.sinceMs;
+    if (input.sleepClock) {
+      const picked = lastClockOccurrence(input.sleepClock, now, timeZone);
+      if (picked === null) return "Enter a valid time.";
+      sleepStart = picked;
+    }
+    // Never overlap something already logged.
+    sleepStart = Math.max(sleepStart, lastEndMs ?? 0);
+
+    if (endMs - sleepStart >= 60_000) {
+      const sleepCat = categories.find((c) => c.kind === "sleep");
+      if (!sleepCat) return "You don't have a Sleep category. Add one in Settings, then try again.";
+      const { error } = await supabase.from("entries").insert({
+        category_id: sleepCat.id,
+        start_at: new Date(sleepStart).toISOString(),
+        end_at: new Date(endMs).toISOString(),
+        source: "sleep_button",
+        answers: {},
+      });
+      if (error) {
+        return error.code === "23P01"
+          ? "Part of that time already has an entry. Pick a later time you fell asleep."
+          : "Couldn't save your sleep. Check your connection and try again.";
+      }
+    }
+
+    // One day_logs row per day: keep the goal snapshot if today already has one.
+    const day = dayOf(now, timeZone, dayStartHour);
+    const goal = day.dayType === "weekend" ? props.weekendGoalMin : props.weekdayGoalMin;
+    const dayFields = {
+      wake_at: new Date(now).toISOString(),
+      sleep_quality: input.quality,
+      planned_study_min: input.planMin,
+    };
+    const existing = await supabase.from("day_logs").select("day").eq("day", day.date).maybeSingle();
+    const logResult = existing.data
+      ? await supabase.from("day_logs").update(dayFields).eq("day", day.date)
+      : await supabase.from("day_logs").insert({ day: day.date, study_goal_min: goal, ...dayFields });
+    if (logResult.error) console.error("Day log not saved:", logResult.error.message);
+
+    const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
+    if (err) return err;
+    if (endMs - sleepStart >= 60_000) setLastEndMs(endMs);
+    setSlotStart(endMs);
+    setLastPrompt(null);
+    missedInARow.current = 0;
+    setWakeOpen(false);
+    return null;
+  }
 
   async function save(parts: SavePart[]): Promise<string | null> {
     if (!prompt) return null;
@@ -137,37 +320,53 @@ export function CheckinController(props: Props) {
     const lastPart = parts[parts.length - 1];
     setLastEntry({ categoryId: lastPart.categoryId, answers: lastPart.answers });
     setLastAnswers((prev) => ({ ...prev, ...Object.fromEntries(parts.map((p) => [p.categoryId, p.answers])) }));
+    setLastEndMs(prompt.endMs);
     setSlotStart(prompt.endMs);
     setLastPrompt(null);
+    missedInARow.current = 0;
     setPrompt(null);
     return null;
   }
 
   function skip() {
     if (!prompt) return;
-    createClient()
-      .from("checkins")
-      .insert({ prompted_at: new Date(prompt.promptedAt).toISOString(), status: "skipped" })
-      .then(({ error }) => error && console.error("Skip not recorded:", error.message));
+    recordCheckin(prompt.promptedAt, "skipped");
+    missedInARow.current = 0; // skipping is an answer: you're awake
     setLastPrompt(Date.now());
     setPrompt(null);
   }
 
-  if (!prompt) return null;
   return (
-    <CheckinModal
-      key={prompt.promptedAt}
-      startMs={prompt.startMs}
-      endMs={prompt.endMs}
-      timeZone={timeZone}
-      categories={categories}
-      questions={questions}
-      lastEntry={lastEntry}
-      lastAnswers={lastAnswers}
-      canAskNotifications={typeof Notification !== "undefined" && Notification.permission === "default"}
-      onEnableNotifications={() => Notification.requestPermission().then(() => bump((n) => n + 1))}
-      onSave={save}
-      onSkip={skip}
-    />
+    <>
+      {prompt && (
+        <CheckinModal
+          key={prompt.promptedAt}
+          startMs={prompt.startMs}
+          endMs={prompt.endMs}
+          subtitle={prompt.subtitle}
+          timeZone={timeZone}
+          categories={categories}
+          questions={questions}
+          lastEntry={lastEntry}
+          lastAnswers={lastAnswers}
+          canAskNotifications={typeof Notification !== "undefined" && Notification.permission === "default"}
+          onEnableNotifications={() => Notification.requestPermission().then(() => bump((n) => n + 1))}
+          onSave={save}
+          onSkip={skip}
+        />
+      )}
+      {busyOpen && <BusyModal presets={props.busyPresets} onStart={startBusy} onCancel={() => setBusyOpen(false)} />}
+      {wakeOpen && mode.status === "sleeping" && mode.sinceMs !== null && (
+        <WakeModal
+          timeZone={timeZone}
+          sleepSinceMs={mode.sinceMs}
+          askSleepTime={mode.label === AUTO_QUIET}
+          dayStartHour={dayStartHour}
+          weekdayGoalMin={props.weekdayGoalMin}
+          weekendGoalMin={props.weekendGoalMin}
+          onSubmit={wake}
+        />
+      )}
+    </>
   );
 }
