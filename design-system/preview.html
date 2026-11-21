@@ -49,7 +49,7 @@ h1, h2, h3, h4, p { margin: 0; }
 [data-kind="sleep"]   { --k: var(--cat-sleep);   --k-soft: var(--cat-sleep-soft);   --k-ink: var(--cat-sleep-ink); }
 [data-kind="rest"]    { --k: var(--cat-rest);    --k-soft: var(--cat-rest-soft);    --k-ink: var(--cat-rest-ink); }
 [data-kind="chore"]   { --k: var(--cat-chore);   --k-soft: var(--cat-chore-soft);   --k-ink: var(--cat-chore-ink); }
-[data-kind="fun"]     { --k: var(--cat-fun);     --k-soft: var(--cat-fun-soft);     --k-ink: var(--cat-fun-ink); }
+[data-kind="entertainment"]     { --k: var(--cat-entertainment);     --k-soft: var(--cat-entertainment-soft);     --k-ink: var(--cat-entertainment-ink); }
 [data-kind="unknown"] { --k: var(--cat-unknown); --k-soft: var(--surface-sunken);   --k-ink: var(--ink-3); }
 [data-kind="busy"]    { --k: var(--honey);       --k-soft: var(--honey-soft);       --k-ink: var(--honey-ink); }
 .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--k); flex: none; }
@@ -180,7 +180,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .blk:hover { filter: brightness(1.06) saturate(1.1); transform: scaleY(1.06); z-index: 2; }
 .blk[data-kind="unknown"] { background: var(--hatch), var(--surface-sunken); color: var(--ink-3); justify-content: center; outline: 1.5px dashed var(--border-strong); outline-offset: -1.5px; }
 .blk[data-kind="unknown"]:hover { outline-color: var(--primary); color: var(--primary); }
-.blk .tag { position: absolute; top: 3px; right: 4px; width: .4rem; height: .4rem; border-radius: 50%; background: var(--cat-fun); box-shadow: 0 0 0 1.5px var(--surface); }
+.blk .tag { position: absolute; top: 3px; right: 4px; width: .4rem; height: .4rem; border-radius: 50%; background: var(--cat-entertainment); box-shadow: 0 0 0 1.5px var(--surface); }
 .blk.live { background-image: linear-gradient(90deg, transparent 60%, rgb(255 255 255 / .35)); background-size: 200% 100%; animation: live 2.4s linear infinite; }
 @keyframes live { to { background-position: -200% 0; } }
 .mark { position: absolute; top: -.35rem; bottom: -.35rem; left: calc(var(--s) / 1440 * 100%); width: 2px; background: var(--ink); border-radius: 2px; z-index: 3; }
@@ -552,7 +552,7 @@ dialog.modal:focus-visible { outline: none; }
       <article class="card where-card">
         <div class="card-head"><h2 class="card-title">Where time went</h2><span class="spacer"></span><span class="xs muted">so far today</span></div>
         <div class="scroll" id="whereList"></div>
-        <div class="xs muted" style="margin-top:.5rem; display:flex; gap:.4rem; align-items:center"><span class="dot" data-kind="fun"></span>While doing: YouTube during Dinner · 35m (not counted twice)</div>
+        <div class="xs muted" style="margin-top:.5rem; display:flex; gap:.4rem; align-items:center"><span class="dot" data-kind="entertainment"></span>While doing: YouTube during Dinner · 35m (not counted twice)</div>
       </article>
 
       <!-- Recent entries (wide screens) -->
@@ -874,7 +874,7 @@ dialog.modal:focus-visible { outline: none; }
     <div>
       <div class="section-label"><span class="overline">While doing</span></div>
       <div class="demo">
-        <button class="chip chip-sm" data-kind="fun" aria-pressed="false" data-toggle><i data-lucide="monitor-play"></i>YouTube</button>
+        <button class="chip chip-sm" data-kind="entertainment" aria-pressed="false" data-toggle><i data-lucide="monitor-play"></i>YouTube</button>
         <button class="chip chip-sm" data-kind="rest" aria-pressed="false" data-toggle><i data-lucide="music"></i>Music</button>
         <button class="chip chip-sm" data-kind="commute" aria-pressed="false" data-toggle><i data-lucide="headphones"></i>Podcast</button>
         <button class="chip chip-sm chip-dashed"><i data-lucide="plus"></i>Tag</button>
@@ -901,7 +901,7 @@ let BLOCKS = [
   { s: 0,    e: 150,  kind: "sleep",   name: "Sleep" },
   { s: 150,  e: 160,  kind: "unknown", name: "Unknown" },
   { s: 160,  e: 220,  kind: "study",   name: "Study · DSA", note: "Focus 5" },
-  { s: 220,  e: 245,  kind: "fun",     name: "Instagram", note: "Unplanned · habit", waste: true },
+  { s: 220,  e: 245,  kind: "entertainment",     name: "Instagram", note: "Unplanned · habit", waste: true },
   { s: 245,  e: 300,  kind: "routine", name: "Breakfast" },
   { s: 300,  e: 340,  kind: "unknown", name: "Unknown" },
   { s: 340,  e: 390,  kind: "routine", name: "Getting ready" },
@@ -909,13 +909,13 @@ let BLOCKS = [
   { s: 420,  e: 900,  kind: "work",    name: "Office", note: "Office day" },
   { s: 900,  e: 960,  kind: "commute", name: "Commute" },
   { s: 960,  e: 980,  kind: "rest",    name: "Rest" },
-  { s: 980,  e: 1020, kind: "fun",     name: "Instagram", note: "Unplanned · tired", waste: true },
+  { s: 980,  e: 1020, kind: "entertainment",     name: "Instagram", note: "Unplanned · tired", waste: true },
   { s: 1020, e: 1055, kind: "routine", name: "Dinner", tag: "YouTube" },
   { s: 1055, e: NOW,  kind: "study",   name: "Study · DSA", live: true },
 ];
-const KIND_NAME = { study: "Study", work: "Office", commute: "Commute", routine: "Routine", sleep: "Sleep", rest: "Rest", chore: "Chores", fun: "Entertainment", unknown: "Unknown" };
-const KIND_ICON = { study: "book-open", work: "briefcase", commute: "bus", routine: "utensils", sleep: "bed", rest: "sofa", chore: "spray-can", fun: "smartphone", unknown: "circle-help" };
-const KIND_VALUE = { study: "Productive", work: "Productive", fun: "Waste" };
+const KIND_NAME = { study: "Study", work: "Office", commute: "Commute", routine: "Routine", sleep: "Sleep", rest: "Rest", chore: "Chores", entertainment: "Entertainment", unknown: "Unknown" };
+const KIND_ICON = { study: "book-open", work: "briefcase", commute: "bus", routine: "utensils", sleep: "bed", rest: "sofa", chore: "spray-can", entertainment: "smartphone", unknown: "circle-help" };
+const KIND_VALUE = { study: "Productive", work: "Productive", entertainment: "Waste" };
 const ACTS = [
   { id: "study", name: "Study", kind: "study", icon: "book-open" },
   { id: "office", name: "Office", kind: "work", icon: "briefcase" },
@@ -925,9 +925,9 @@ const ACTS = [
   { id: "chores", name: "Chores", kind: "chore", icon: "spray-can" },
   { id: "rest", name: "Rest", kind: "rest", icon: "sofa" },
   { id: "sleep", name: "Sleep", kind: "sleep", icon: "bed" },
-  { id: "insta", name: "Instagram", kind: "fun", icon: "smartphone", waste: true },
-  { id: "youtube", name: "YouTube", kind: "fun", icon: "monitor-play", waste: true },
-  { id: "movie", name: "Movie / Series", kind: "fun", icon: "clapperboard", waste: true },
+  { id: "insta", name: "Instagram", kind: "entertainment", icon: "smartphone", waste: true },
+  { id: "youtube", name: "YouTube", kind: "entertainment", icon: "monitor-play", waste: true },
+  { id: "movie", name: "Movie / Series", kind: "entertainment", icon: "clapperboard", waste: true },
 ];
 
 /* ---------------- Helpers ---------------- */
@@ -1073,9 +1073,9 @@ function renderCi() {
       <label>Subject</label><div class="demo" data-single><button class="chip chip-sm" data-kind="study" aria-pressed="true">DSA</button><button class="chip chip-sm" data-kind="study" aria-pressed="false">System design</button><button class="chip chip-sm" data-kind="study" aria-pressed="false">English</button></div>
       <label>Focus</label><div class="rating" data-single>${[1, 2, 3, 4, 5].map((n) => `<button aria-pressed="${n === 4}">${n}</button>`).join("")}</div>
       <label>Phone checks</label><div class="stepper" data-stepper><button>−</button><output>0</output><button>+</button></div></div></div>`;
-    if (a.kind === "fun") return `<div class="detail" data-kind="fun"><div class="section-label"><span class="overline" style="color:var(--k-ink)">${a.name} details</span></div><div class="qgrid">
+    if (a.kind === "entertainment") return `<div class="detail" data-kind="entertainment"><div class="section-label"><span class="overline" style="color:var(--k-ink)">${a.name} details</span></div><div class="qgrid">
       <label>Planned?</label><div class="seg" data-single data-q="planned"><button aria-pressed="false" data-v="yes">Yes, planned</button><button aria-pressed="true" data-v="no">Just happened</button></div>
-      <label>What made you pick it up?</label><div class="demo" data-single>${["Bored", "Tired", "Stressed", "Habit", "Break"].map((t) => `<button class="chip chip-sm" data-kind="fun" aria-pressed="${t === "Tired"}">${t}</button>`).join("")}</div>
+      <label>What made you pick it up?</label><div class="demo" data-single>${["Bored", "Tired", "Stressed", "Habit", "Break"].map((t) => `<button class="chip chip-sm" data-kind="entertainment" aria-pressed="${t === "Tired"}">${t}</button>`).join("")}</div>
       <label>Mood after</label><div class="seg" data-single><button aria-pressed="false">Better</button><button aria-pressed="true">Same</button><button aria-pressed="false">Worse</button></div></div></div>`;
     if (a.kind === "rest") return `<div class="detail" data-kind="rest"><div class="qgrid"><label>Felt refreshed?</label><div class="seg" data-single><button aria-pressed="true">Yes</button><button aria-pressed="false">No</button></div></div></div>`;
     return "";

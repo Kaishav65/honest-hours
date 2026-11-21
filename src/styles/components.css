@@ -30,7 +30,7 @@ h1, h2, h3, h4, p { margin: 0; }
 [data-kind="sleep"]   { --k: var(--cat-sleep);   --k-soft: var(--cat-sleep-soft);   --k-ink: var(--cat-sleep-ink); }
 [data-kind="rest"]    { --k: var(--cat-rest);    --k-soft: var(--cat-rest-soft);    --k-ink: var(--cat-rest-ink); }
 [data-kind="chore"]   { --k: var(--cat-chore);   --k-soft: var(--cat-chore-soft);   --k-ink: var(--cat-chore-ink); }
-[data-kind="fun"]     { --k: var(--cat-fun);     --k-soft: var(--cat-fun-soft);     --k-ink: var(--cat-fun-ink); }
+[data-kind="entertainment"]     { --k: var(--cat-entertainment);     --k-soft: var(--cat-entertainment-soft);     --k-ink: var(--cat-entertainment-ink); }
 [data-kind="unknown"] { --k: var(--cat-unknown); --k-soft: var(--surface-sunken);   --k-ink: var(--ink-3); }
 [data-kind="busy"]    { --k: var(--honey);       --k-soft: var(--honey-soft);       --k-ink: var(--honey-ink); }
 .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--k); flex: none; }
@@ -161,7 +161,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .blk:hover { filter: brightness(1.06) saturate(1.1); transform: scaleY(1.06); z-index: 2; }
 .blk[data-kind="unknown"] { background: var(--hatch), var(--surface-sunken); color: var(--ink-3); justify-content: center; outline: 1.5px dashed var(--border-strong); outline-offset: -1.5px; }
 .blk[data-kind="unknown"]:hover { outline-color: var(--primary); color: var(--primary); }
-.blk .tag { position: absolute; top: 3px; right: 4px; width: .4rem; height: .4rem; border-radius: 50%; background: var(--cat-fun); box-shadow: 0 0 0 1.5px var(--surface); }
+.blk .tag { position: absolute; top: 3px; right: 4px; width: .4rem; height: .4rem; border-radius: 50%; background: var(--cat-entertainment); box-shadow: 0 0 0 1.5px var(--surface); }
 .blk.live { background-image: linear-gradient(90deg, transparent 60%, rgb(255 255 255 / .35)); background-size: 200% 100%; animation: live 2.4s linear infinite; }
 @keyframes live { to { background-position: -200% 0; } }
 .mark { position: absolute; top: -.35rem; bottom: -.35rem; left: calc(var(--s) / 1440 * 100%); width: 2px; background: var(--ink); border-radius: 2px; z-index: 3; }

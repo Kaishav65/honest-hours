@@ -15,6 +15,7 @@
 - [x] Screens and layout rules (§9)
 - [x] Database tables (§10), calculations (§11), coach messages (§12)
 - [x] Design system "Clean" ([design-system/](design-system/DESIGN_SYSTEM.md)) and "Notebook" skin ([design-system-v2/](design-system-v2/DESIGN_SYSTEM.md))
+- [x] Node 24 LTS + Vitest; category kind names unified (`entertainment` everywhere)
 - [x] Name: **Honest Hours**. Display name ("What should we call you?") shown in the greeting
 
 ### Accounts & services
@@ -61,7 +62,8 @@ Each step has a check that proves it works.
 - **Check:** wrong code fails; right code creates account + defaults; logout → redirected to `/login`
 
 ### Step 4 — Time logic (`src/lib/time/`)
-- [ ] Install Node 22 LTS, then add Vitest (failed on Node 21 due to `@types/node` peer conflict)
+- [x] Node 24 LTS installed (via nvm) and Vitest added
+- [ ] Add `"test": "vitest run"` script
 - [ ] Day boundary at `day_start_hour` (3 AM), user timezone, weekday/weekend day type
 - [ ] Find Unknown gaps between entries; split a slot into parts
 - **Check:** unit tests around midnight, 3 AM and day-type changes
@@ -131,7 +133,7 @@ Each step has a check that proves it works.
   `npx supabase db push --remote="$SUPABASE_DB_URL" --yes`. One-off SQL: `npx supabase db query --remote="$SUPABASE_DB_URL" --yes "<sql>"`.
 - **Invite codes:** `insert into public.invite_codes (code, max_uses, note) values ('HH-XXXXXXXX', 5, 'who');` Users must sign up through the app (dashboard-created users fail the invite check).
 - **Styling:** use the design system classes in `src/styles/components.css` (`.btn`, `.card`, `.chip`, …), not shadcn styling, so the Notebook skin can override them later.
-- **Category kind mismatch:** CSS uses `data-kind="fun"`; the database uses `entertainment`. Map in code.
 - **Changes from PLAN §3:** no "Wake up" category ("I'm awake" button instead); Movie / Series asks "Planned?"; question type `number` for phone checks.
 - **Next.js 16:** APIs differ from older versions; read `node_modules/next/dist/docs/` before using a new API (see [AGENTS.md](AGENTS.md)).
-- **Node:** currently v21.1.0; upgrade to 22 LTS before step 4.
+- **Node:** 24 LTS via nvm-windows (`nvm use 24.22.3`); pinned in `package.json` engines (`24.x`) and `.nvmrc`. The old winget Node 21 was uninstalled.
+- **Category kinds:** the same 8 names everywhere (database, CSS `data-kind`, tokens `--cat-*`): sleep, study, work, commute, routine, chore, entertainment, rest. `busy` and `unknown` are UI-only states.

@@ -56,7 +56,7 @@ Sage scale `--sage-50 … --sage-900`. **Primary = `--sage-600` (light) / `--sag
 | sleep | Lilac | Neutral |
 | rest | Sea green | Neutral |
 | chore | Taupe | Neutral |
-| fun (entertainment) | Clay | **Waste** (if unplanned) |
+| entertainment | Clay | **Waste** (if unplanned) |
 | unknown | Hatched grey | Neutral, always visible |
 
 Each kind has 3 tokens: `--cat-{kind}` (chart fill), `--cat-{kind}-soft` (chip background), `--cat-{kind}-ink` (text/icon on soft). In components set `data-kind="study"` and use `--k`, `--k-soft`, `--k-ink`.

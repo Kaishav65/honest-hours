@@ -85,7 +85,7 @@
   --cat-sleep: var(--lilac);      --cat-sleep-soft: var(--lilac-soft); --cat-sleep-ink: var(--lilac-ink);
   --cat-rest: var(--sea);         --cat-rest-soft: var(--sea-soft);    --cat-rest-ink: var(--sea-ink);
   --cat-chore: var(--taupe);      --cat-chore-soft: var(--taupe-soft); --cat-chore-ink: var(--taupe-ink);
-  --cat-fun: var(--clay);         --cat-fun-soft: var(--clay-soft);    --cat-fun-ink: var(--clay-ink);
+  --cat-entertainment: var(--clay);         --cat-entertainment-soft: var(--clay-soft);    --cat-entertainment-ink: var(--clay-ink);
   --cat-unknown: #d9d1c1;         /* always drawn hatched, never solid */
 
   /* Value of time (Productive / Neutral / Waste) */
@@ -195,7 +195,7 @@
   --cat-sleep-soft: #2e2a3a;   --cat-sleep-ink: #d3cae4;
   --cat-rest-soft: #213530;    --cat-rest-ink: #b9dbd0;
   --cat-chore-soft: #322b26;   --cat-chore-ink: #d8cabd;
-  --cat-fun-soft: #3d2620;     --cat-fun-ink: #f0b9a6;
+  --cat-entertainment-soft: #3d2620;     --cat-entertainment-ink: #f0b9a6;
   --cat-unknown: #4a4f42;
 
   --value-productive: var(--sage-400);
