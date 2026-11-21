@@ -201,6 +201,7 @@ h1, h2, h3, h4, p { margin: 0; }
 dialog.modal {
   border: 0; padding: 0; border-radius: var(--radius-xl); background: var(--surface-raised); color: var(--ink);
   box-shadow: var(--shadow-lg); width: min(48rem, 94vw); max-height: min(46rem, 94dvh);
+  margin: auto; /* Tailwind's reset zeroes the margin that centres a <dialog> */
 }
 dialog.modal[open] { display: flex; flex-direction: column; animation: modal-in var(--dur-slow) var(--ease-out); }
 dialog.modal::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }

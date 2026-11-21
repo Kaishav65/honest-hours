@@ -56,9 +56,8 @@ const toStatus = (s: string): Status => (s === "busy" || s === "sleeping" ? s : 
 // check-in covers 70 minutes.
 export function CheckinController(props: Props) {
   const { userId, timeZone, dayStartHour, intervalMin, categories, questions } = props;
-  const [slotStart, setSlotStart] = useState(() =>
-    slotStartMs(props.lastEndMs, Date.now(), timeZone, dayStartHour),
-  );
+  // The clock is only read after mount (never while rendering), so server rendering stays stable.
+  const [slotStart, setSlotStart] = useState<number | null>(null);
   const [lastEndMs, setLastEndMs] = useState(props.lastEndMs);
   const [lastPrompt, setLastPrompt] = useState<number | null>(null);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
@@ -70,20 +69,29 @@ export function CheckinController(props: Props) {
     sinceMs: props.statusSinceMs,
     untilMs: props.statusUntilMs,
   });
-  // A night's sleep ends with the "I'm awake" popup, which opens by itself when the app loads while sleeping.
-  const [wakeOpen, setWakeOpen] = useState(props.status === "sleeping");
+  const [wakeOpen, setWakeOpen] = useState(false);
   const [busyOpen, setBusyOpen] = useState(false);
   const missedInARow = useRef(0);
   const [, bump] = useState(0);
 
-  const due = nextDueMs(slotStart, lastPrompt, intervalMin);
+  const due = slotStart === null ? null : nextDueMs(slotStart, lastPrompt, intervalMin);
   const active = mode.status === "normal" && !wakeOpen && !busyOpen;
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setSlotStart((s) => s ?? slotStartMs(props.lastEndMs, Date.now(), timeZone, dayStartHour));
+      // A night's sleep ends with the "I'm awake" popup, which opens by itself when the app loads while sleeping.
+      if (props.status === "sleeping") setWakeOpen(true);
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on mount
+  }, []);
 
   const openPrompt = useCallback(
     (subtitle?: string) => {
       const now = Date.now();
       const endMs = floorToMinute(now);
-      if (endMs - slotStart < 60_000) return;
+      if (slotStart === null || endMs - slotStart < 60_000) return;
       setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle });
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         const n = new Notification("Honest Hours", {
@@ -124,7 +132,7 @@ export function CheckinController(props: Props) {
 
   // Open the popup when due. Checked on a timer and whenever the tab becomes visible again.
   useEffect(() => {
-    if (prompt || !active) return;
+    if (prompt || !active || due === null) return;
     const check = () => {
       if (Date.now() >= due) openPrompt();
     };

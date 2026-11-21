@@ -4,7 +4,7 @@
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
 > Last updated: 2026-11-21
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5 and 6 are coded and need your manual check in the browser. **Next: Step 7 — Schedules & Office day** (after the manual checks).
+**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5 and 6 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 7 — Schedules & Office day** (after the manual checks).
 
 ---
 
@@ -76,7 +76,8 @@ Each step has a check that proves it works.
 - [x] Browser notification when the tab is in the background (permission button in the popup footer); `L` key and status-bar button = Log now; status bar shows next check-in time
 - [x] Save entries + `entry_tags` + `checkins` row (Skip / Esc saves a `skipped` check-in and waits one more interval)
 - Verified: lint + build + 23 unit tests (schedule, answers ↔ columns); save path checked against the real database with a throwaway user (split insert, tag, check-ins, overlap rejected, recent read)
-- **Still to check by hand:** popup opens when due; Save creates entries; split 20 + 10 min; away 70 min → slot covers the full 70 min; Skip waits another interval; notification appears with the tab in the background
+- Browser-tested: sign-up → `/today` with name in sidebar; `L` opens the popup; split into two parts and Save writes both entries + an `answered` check-in; logout → `/login`
+- **Still to check by hand:** away 70 min → slot covers the full 70 min; Skip waits another interval; notification appears with the tab in the background
 - Known limits: popups only while `status = normal` (Busy/Sleep in step 6); the first-ever slot starts when the app first loads; secondary saves (tags, check-in row) log to the console if they fail
 
 ### Step 6 — Busy mode & sleep (code done, manual check pending)
@@ -85,7 +86,8 @@ Each step has a check that proves it works.
 - [x] Late-night go-quiet: a popup unanswered for a whole interval is recorded as `missed`; 2 missed in a row between 22:00 and day start → status `sleeping` (`status_label = auto-quiet`); next morning asks "When did you sleep?"
 - [x] Status bar shows live state (Now: Tracking / Busy · until / Sleeping · since) and swaps its buttons
 - Verified: lint + build + 30 unit tests (clock helpers, late-night rule); database side checked with a throwaway user (status updates, sleep entry, day_logs insert/update, missed check-in, invalid status rejected)
-- **Still to check by hand:** Busy 30 min → no popups, then block popup at the end; "End busy" early; Going to sleep → no popups; I'm awake → Sleep entry + quality/plan saved; reload while sleeping → "Good morning" popup; ignore 2 popups late at night → goes quiet
+- Browser-tested: Busy 30 min with label → status bar shows it, End busy returns to Tracking; Going to sleep → Sleeping; reload while sleeping → "Good morning" popup; I'm awake → `day_logs` row saved (quality 4, weekend goal 240)
+- **Still to check by hand:** Busy block popup at the end (needs a real wait); Sleep entry for a longer sleep; ignore 2 popups late at night → goes quiet
 - Known limits: an unanswered popup closes after one interval even if you were mid-way through filling it in; time before "Going to sleep" that was never logged stays Unknown (fill it from the Timeline in step 8); busy blocks are saved as normal check-ins (`source = checkin`)
 
 ### Step 7 — Schedules & Office day

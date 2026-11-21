@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { fieldsToAnswers } from "@/lib/checkin/answers";
 import type { Answers, Category, CategoryKind, EntryAnswerFields, Question, QuestionType, SystemKey } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/server";
@@ -6,6 +7,7 @@ import { CheckinController } from "./checkin-controller";
 
 // Loads what the check-in popup needs (profile, categories, questions, recent entries) on the server.
 export async function CheckinHost() {
+  await connection(); // per-user and time-dependent: render at request time, never prerender
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims.sub;
