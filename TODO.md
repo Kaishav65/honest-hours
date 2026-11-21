@@ -2,9 +2,9 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-21 (Step 8 coded)
+> Last updated: 2026-11-21 (Step 9 coded)
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5, 6, 7 and 8 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 9 — Today dashboard.**
+**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–9 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 10 — Settings.**
 
 ---
 
@@ -106,9 +106,14 @@ Each step has a check that proves it works.
 - **Still to check by hand:** edit an entry's category/answers; edit times so it overlaps a neighbour (should show an error); a sleep that crosses midnight (times are locked when it runs past this day's edges)
 - Known limits: "While doing" tags are not editable here yet; a whole empty day reads "3:00 AM – 3:00 AM"
 
-### Step 9 — Today dashboard
-- [ ] Greeting with display name, free time card, study vs goal, free time left, 24 h ribbon, where time went, tracking %
-- **Check:** numbers match a hand calculation for a test day
+### Step 9 — Today dashboard (code done, manual check pending)
+- [x] Greeting with display name + "N pomodoros left" (goal remaining ÷ 25), date / day type line
+- [x] Tiles: Study today (ring, goal from `day_logs` snapshot or profile, planned hours badge), Free time at home (study + entertainment + rest, stacked bar), Free time left (until usual sleep = median bedtime of last 14 days, midnight until 3 bedtimes; pips = pomodoros), Wasted today (waste-value time that wasn't planned)
+- [x] "Your day" 24 h ribbon with Now and Usual sleep markers, tracking % + unknown badge, link to the Timeline; "Where time went" per category + Unknown
+- [x] All formulas in `src/lib/insights/today.ts` (pure, 10 unit tests with a hand-calculated day); styles ported from the design system into `components.css`
+- Verified: lint + build + 57 tests; browser test (Chrome via Playwright, 1366×768, no page scroll, no console errors): after one Office day tap the numbers match (Office 8h, Commute 1h 20m, 0 study, tracked % = logged ÷ minutes passed)
+- **Still to check by hand:** a day with study + Instagram (wasted / free time tiles), dark mode, 1920×1080
+- Known limits: no coach card, streak or "today's one goal" yet (v2); "While doing" tags aren't counted in the tiles
 
 ### Step 10 — Settings
 - [ ] Tabs: Categories & questions / Popups & schedule / Busy presets / Account (display name, password) / theme
