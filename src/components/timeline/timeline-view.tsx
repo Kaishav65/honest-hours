@@ -139,17 +139,29 @@ export function TimelineView(p: Props) {
                 <li key={b.type === "entry" ? b.entry.id : `gap-${b.startMs}`}>
                   <button
                     type="button"
-                    className="row tl-row"
+                    className="row"
                     data-kind={b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown")}
-                    data-gap={b.type === "gap" ? (open ? "open" : "unknown") : undefined}
                     onClick={() => openBlock(b)}
                     disabled={open}
+                    style={{
+                      width: "100%",
+                      padding: ".55rem .8rem",
+                      gap: ".8rem",
+                      textAlign: "left",
+                      cursor: open ? "default" : "pointer",
+                      borderRadius: "var(--radius-md)",
+                      border: b.type === "gap" ? "1.5px dashed var(--border-strong)" : "1px solid color-mix(in srgb, var(--k) 45%, transparent)",
+                      borderLeft: b.type === "gap" ? undefined : "4px solid var(--k)",
+                      // Each row is tinted with its category's soft colour; Unknown stays hatched/neutral.
+                      background: b.type === "gap" ? "var(--hatch), var(--surface-sunken)" : "var(--k-soft)",
+                      color: b.type === "gap" ? undefined : "var(--k-ink)",
+                    }}
                   >
                     <span className="dot" />
-                    <span className="tl-time sm">
+                    <span className="sm muted" style={{ width: "10.5rem", fontVariantNumeric: "tabular-nums" }}>
                       {formatClock(b.startMs, p.timeZone)} – {formatClock(b.endMs, p.timeZone)}
                     </span>
-                    <span className="tl-name">
+                    <span style={{ fontWeight: 600, flex: 1 }}>
                       {b.type === "gap" ? (open ? "Now: the next check-in covers this" : "Unknown") : (cat?.name ?? "Deleted category")}
                     </span>
                     {b.type === "entry" && b.entry.source === "backfill" && <span className="badge">filled later</span>}

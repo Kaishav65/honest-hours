@@ -350,22 +350,3 @@ dialog.modal:focus-visible { outline: none; }
 @container main (max-width: 70rem) {
   .tile-goal .ring { --size: 4.25rem; }
 }
-
-/* ---------- Timeline rows: a soft wash of the category colour with a slim accent on the left ---------- */
-.tl-row {
-  width: 100%; padding: .6rem .9rem .6rem 1rem; gap: .8rem; text-align: left; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--k) 22%, var(--border)); border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--k-soft) 55%, var(--surface-raised));
-  box-shadow: inset 3px 0 0 var(--k);
-  transition: background var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
-}
-.tl-row:hover:not(:disabled) { background: var(--k-soft); box-shadow: inset 3px 0 0 var(--k), var(--shadow-sm); transform: translateY(-1px); }
-.tl-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.tl-row .dot { width: .65rem; height: .65rem; }
-.tl-time { width: 10.5rem; flex: none; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.tl-name { flex: 1; min-width: 0; font-weight: 600; color: var(--ink); }
-.tl-row[data-gap] { border: 1.5px dashed var(--border-strong); background: transparent; box-shadow: none; }
-.tl-row[data-gap="unknown"]:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--primary); box-shadow: none; }
-.tl-row[data-gap="unknown"] .tl-name { color: var(--ink-2); }
-.tl-row[data-gap="open"] { cursor: default; background: var(--surface-sunken); }
-.tl-row[data-gap="open"] .tl-name { font-weight: 500; color: var(--ink-3); }
