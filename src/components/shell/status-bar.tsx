@@ -1,6 +1,14 @@
 "use client";
 
 import { Bell, Moon, Pause, Plus, SunMoon } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import {
+  formatClock,
+  getCheckinStatus,
+  getServerCheckinStatus,
+  requestLogNow,
+  subscribeCheckin,
+} from "@/lib/checkin/store";
 
 function toggleTheme() {
   const root = document.documentElement;
@@ -9,8 +17,9 @@ function toggleTheme() {
   localStorage.setItem("hh-theme", next);
 }
 
-// Static for now: live state arrives with check-ins (step 5) and Busy / Sleep (step 6).
+// Next check-in comes from the check-in controller; live state for Busy / Sleep arrives in step 6.
 export function StatusBar() {
+  const { nextDueMs, timeZone } = useSyncExternalStore(subscribeCheckin, getCheckinStatus, getServerCheckinStatus);
   return (
     <header className="statusbar">
       <div className="state" data-kind="unknown">
@@ -20,10 +29,10 @@ export function StatusBar() {
       <div className="vsep" />
       <span className="status-item">
         <Bell className="lucide" aria-hidden />
-        Next check-in <b>—</b>
+        Next check-in <b>{nextDueMs ? formatClock(nextDueMs, timeZone) : "—"}</b>
       </span>
       <span className="spacer" />
-      <button className="btn btn-primary btn-sm" disabled title="Coming in step 5">
+      <button className="btn btn-primary btn-sm" onClick={requestLogNow} title="Log what you did so far (L)">
         <Plus className="lucide" aria-hidden />
         Log now <span className="kbd">L</span>
       </button>

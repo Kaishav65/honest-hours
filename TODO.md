@@ -4,7 +4,7 @@
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
 > Last updated: 2026-11-21
 
-**Current status:** v1 steps 0–2 and 4 done; Step 3 code done (still needs your manual sign-up/login check). **Next: Step 5 — Check-in popup.**
+**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5 are coded and need your manual check in the browser. **Next: Step 6 — Busy mode & sleep** (after the manual checks).
 
 ---
 
@@ -70,12 +70,14 @@ Each step has a check that proves it works.
 - [x] Find Unknown gaps between entries (`findGaps`); split a slot into parts (`splitSlot`) (`slots.ts`)
 - Verified: 16 unit tests pass (midnight, 3 AM, day-type changes, gaps, splits, DST). **Run tests from PowerShell** (`npm test`); from Git Bash the `/c/...` path makes Vitest fail with "failed to find the current suite"
 
-### Step 5 — Check-in popup
-- [ ] Timer from saved timestamps (background tabs throttle timers), interval from profile
-- [ ] Modal: category chips, split slot, "Same as before", while-doing tags, category questions (prefilled with last answers)
-- [ ] Browser notification when the tab is in the background; `L` key = Log now
-- [ ] Save entries + `checkins` row
-- **Check:** away 70 min → next check-in covers the full 70 min
+### Step 5 — Check-in popup (code done, manual check pending)
+- [x] Timer from saved timestamps (`src/lib/checkin/schedule.ts`), interval from profile; checked every 15 s and when the tab becomes visible
+- [x] Modal (`src/components/checkin/`): category chips, split slot (slider moves the boundary), "Same as before", while-doing tags, category questions prefilled with last answers
+- [x] Browser notification when the tab is in the background (permission button in the popup footer); `L` key and status-bar button = Log now; status bar shows next check-in time
+- [x] Save entries + `entry_tags` + `checkins` row (Skip / Esc saves a `skipped` check-in and waits one more interval)
+- Verified: lint + build + 23 unit tests (schedule, answers ↔ columns); save path checked against the real database with a throwaway user (split insert, tag, check-ins, overlap rejected, recent read)
+- **Still to check by hand:** popup opens when due; Save creates entries; split 20 + 10 min; away 70 min → slot covers the full 70 min; Skip waits another interval; notification appears with the tab in the background
+- Known limits: popups only while `status = normal` (Busy/Sleep in step 6); the first-ever slot starts when the app first loads; secondary saves (tags, check-in row) log to the console if they fail
 
 ### Step 6 — Busy mode & sleep
 - [ ] Busy: 30 min / 1 h / 2 h / until time / presets; no popups; block filled on end

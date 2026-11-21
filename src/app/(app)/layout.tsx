@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Sprout } from "lucide-react";
+import { CheckinHost } from "@/components/checkin/checkin-host";
 import { UserBadge } from "@/components/shell/user-badge";
 import { Sidebar } from "@/components/shell/sidebar";
 import { StatusBar } from "@/components/shell/status-bar";
@@ -23,6 +24,9 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         }
       />
       <main className="main">{children}</main>
+      <Suspense>
+        <CheckinHost />
+      </Suspense>
     </div>
   );
 }
