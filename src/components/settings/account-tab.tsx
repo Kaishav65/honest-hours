@@ -9,8 +9,7 @@ type Msg = { ok: boolean; text: string } | null;
 const color = (m: NonNullable<Msg>) => (m.ok ? "var(--success)" : "var(--danger)");
 
 function applyTheme(choice: "light" | "dark" | "system") {
-  if (choice === "system") localStorage.removeItem("hh-theme");
-  else localStorage.setItem("hh-theme", choice);
+  localStorage.setItem("hh-theme", choice);
   const dark = choice === "dark" || (choice === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
@@ -25,9 +24,9 @@ export function AccountTab({ profile, onChanged }: Props) {
   const [pwMsg, setPwMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState<"name" | "pw" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
-    if (typeof localStorage === "undefined") return "system";
+    if (typeof localStorage === "undefined") return "light";
     const t = localStorage.getItem("hh-theme");
-    return t === "light" || t === "dark" ? t : "system";
+    return t === "dark" || t === "system" ? t : "light";
   });
 
   async function saveName(e: FormEvent) {

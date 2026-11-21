@@ -2,7 +2,7 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-21 (Step 10 coded)
+> Last updated: 2026-11-22 (Step 11: PWA manifest + icons done, Vercel deploy next)
 
 **Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 11 — Install & deploy (PWA + Vercel).**
 
@@ -127,7 +127,7 @@ Each step has a check that proves it works.
 - Known limits: kind can't be changed after creating a category (scores depend on it); question labels can't be renamed (remove and re-add); no "Delete my account" yet; Look (Clean / Notebook) is v2; timezone is shown but not editable; no coach / streak / strictness settings until v2
 
 ### Step 11 — Install & deploy
-- [ ] PWA manifest + icons (installs as its own window)
+- [x] PWA manifest + icons (installs as its own window): Sprout-on-sage icon (tab, home screen, installed app), `src/app/manifest.ts`, page titles on every page; manifest/icons are public in `src/proxy.ts`. Verified: build + 57 tests; manifest and icons return 200 when logged out
 - [ ] Deploy to Vercel with env vars
 - **Check:** installs from the live URL and works end to end
 

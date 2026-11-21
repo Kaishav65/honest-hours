@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { fieldsToAnswers } from "@/lib/checkin/answers";
@@ -91,3 +92,5 @@ async function TimelineData({ searchParams }: { searchParams: PageProps<"/timeli
     />
   );
 }
+
+export const metadata: Metadata = { title: "Timeline · Honest Hours" };

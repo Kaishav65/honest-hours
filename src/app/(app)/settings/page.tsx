@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { SettingsView } from "@/components/settings/settings-view";
@@ -73,3 +74,5 @@ async function SettingsData() {
     />
   );
 }
+
+export const metadata: Metadata = { title: "Settings · Honest Hours" };

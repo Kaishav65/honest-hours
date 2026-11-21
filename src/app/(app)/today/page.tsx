@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Gauge, Hourglass, House, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -322,3 +323,5 @@ async function TodayData() {
     </section>
   );
 }
+
+export const metadata: Metadata = { title: "Today · Honest Hours" };
