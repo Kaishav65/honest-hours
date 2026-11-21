@@ -6,8 +6,9 @@ import { useState } from "react";
 import { duration } from "@/components/checkin/checkin-modal";
 import { formatClock } from "@/lib/checkin/store";
 import type { Answers, Category, Question } from "@/lib/checkin/types";
-import { buildBlocks, type Block, type EntryRow } from "@/lib/time/blocks";
+import { buildBlocks, type EntryRow } from "@/lib/time/blocks";
 import type { TrackedDay } from "@/lib/time";
+import { BlockTip, type TipInfo } from "./block-tip";
 import { EntryEditor, type EditTarget } from "./entry-editor";
 
 export type TimelineEntry = EntryRow & { answers: Answers };
@@ -29,33 +30,10 @@ type Props = {
 
 const minutes = (ms: number) => Math.round(ms / 60_000);
 
-// Hover card above a ribbon block, following the pointer horizontally (kept inside the window).
-function BlockTip({ tip, byId, timeZone }: { tip: { x: number; y: number; block: Block }; byId: Map<string, Category>; timeZone: string }) {
-  const { block: b } = tip;
-  const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
-  const kind = b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown");
-  const x = Math.min(Math.max(tip.x, 120), window.innerWidth - 120);
-  return (
-    <div className="tip" data-kind={kind} role="tooltip" style={{ left: x, top: tip.y - 8, transform: "translate(-50%, -100%)" }}>
-      <span className="tip-name">
-        <span className="dot" data-kind={kind} />
-        {b.type === "gap" ? (b.open ? "Now (being tracked)" : "Unknown") : (cat?.name ?? "Deleted category")}
-      </span>
-      <span className="tip-time">
-        {formatClock(b.startMs, timeZone)} – {formatClock(b.endMs, timeZone)}
-      </span>
-      <span className="tip-dur">
-        {duration(minutes(b.endMs - b.startMs))}
-        {b.type === "gap" && !b.open ? " · click to fill" : b.type === "entry" ? " · click to edit" : ""}
-      </span>
-    </div>
-  );
-}
-
 export function TimelineView(p: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState<EditTarget | null>(null);
-  const [tip, setTip] = useState<{ x: number; y: number; block: Block } | null>(null);
+  const [tip, setTip] = useState<TipInfo | null>(null);
   const byId = new Map(p.categories.map((c) => [c.id, c]));
   const entryById = new Map(p.entries.map((e) => [e.id, e]));
   const blocks = buildBlocks(p.entries, p.day, p.nowMs);
@@ -120,7 +98,17 @@ export function TimelineView(p: Props) {
                 className="blk"
                 data-kind={b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown")}
                 style={{ "--s": minutes(b.startMs - p.day.startMs), "--d": minutes(b.endMs - b.startMs) } as React.CSSProperties}
-                onMouseMove={(e) => setTip({ x: e.clientX, y: e.currentTarget.getBoundingClientRect().top, block: b })}
+                onMouseMove={(e) =>
+                  setTip({
+                    x: e.clientX,
+                    y: e.currentTarget.getBoundingClientRect().top,
+                    name: b.type === "gap" ? (b.open ? "Now (being tracked)" : "Unknown") : (cat?.name ?? "Deleted category"),
+                    kind: b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown"),
+                    startMs: b.startMs,
+                    endMs: b.endMs,
+                    hint: b.type === "gap" ? (b.open ? undefined : "click to fill") : "click to edit",
+                  })
+                }
                 onMouseLeave={() => setTip(null)}
                 onClick={() => openBlock(b)}
               />
@@ -136,7 +124,7 @@ export function TimelineView(p: Props) {
         </div>
       </div>
 
-      {tip && <BlockTip tip={tip} byId={byId} timeZone={p.timeZone} />}
+      {tip && <BlockTip tip={tip} timeZone={p.timeZone} />}
 
       <div className="card scroll" style={{ flex: 1 }}>
         {blocks.length === 0 ? (

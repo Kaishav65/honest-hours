@@ -9,6 +9,7 @@ import { computeToday, usualSleepMs, type InsightEntry } from "@/lib/insights/to
 import { createClient } from "@/lib/supabase/server";
 import { dayOf, localParts } from "@/lib/time";
 import { buildBlocks } from "@/lib/time/blocks";
+import { DayRibbon, type RibbonBlock } from "@/components/timeline/day-ribbon";
 
 export default function TodayPage() {
   return (
@@ -117,6 +118,19 @@ async function TodayData() {
     day,
     nowMs,
   );
+  const ribbonBlocks: RibbonBlock[] = blocks.map((b) => {
+    const cat = b.type === "entry" ? byId.get(entries[Number(b.entry.id)].categoryId) : undefined;
+    return {
+      key: `${b.type}-${b.startMs}`,
+      name: b.type === "gap" ? (b.open ? "Now (being tracked)" : "Unknown") : (cat?.name ?? "Deleted category"),
+      kind: b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown"),
+      startMs: b.startMs,
+      endMs: b.endMs,
+      s: Math.round((b.startMs - day.startMs) / MIN),
+      d: Math.round((b.endMs - b.startMs) / MIN),
+      hint: "click to open the Timeline",
+    };
+  });
   const nowOffset = Math.round((Math.min(nowMs, day.endMs) - day.startMs) / MIN);
   const pct = goalMin > 0 ? Math.min(100, Math.round((s.studyMin / goalMin) * 100)) : 100;
   const weekday = new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", weekday: "long", day: "numeric", month: "short" }).format(
@@ -255,25 +269,14 @@ async function TodayData() {
             {s.unknownMin >= 1 ? ` · ${plain(s.unknownMin)} unknown` : ""}
           </span>
         </div>
-        <div className="ribbon">
-          {blocks.map((b) => {
-            const cat = b.type === "entry" ? byId.get(entries[Number(b.entry.id)].categoryId) : undefined;
-            return (
-              <div
-                key={`${b.type}-${b.startMs}`}
-                className="blk"
-                data-kind={b.type === "gap" ? "unknown" : ((cat?.kind as CategoryKind | undefined) ?? "unknown")}
-                style={{ "--s": Math.round((b.startMs - day.startMs) / MIN), "--d": Math.round((b.endMs - b.startMs) / MIN), cursor: "default" } as CSSProperties}
-              />
-            );
-          })}
+        <DayRibbon blocks={ribbonBlocks} timeZone={tz}>
           <div className="mark sleepline" style={{ "--s": usualSleepOffset } as CSSProperties}>
             {Math.abs(usualSleepOffset - nowOffset) > 120 && <span>Usual sleep</span>}
           </div>
           <div className="mark" style={{ "--s": nowOffset } as CSSProperties}>
             <span>Now</span>
           </div>
-        </div>
+        </DayRibbon>
         <div className="axis" aria-hidden>
           {axis.map((label, i) => (
             <span key={i} style={{ left: `${(i / 8) * 100}%`, whiteSpace: "nowrap" }}>
