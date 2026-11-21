@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Moon, Pause, Plus, Square, Sun, SunMoon } from "lucide-react";
+import { Bell, Briefcase, Moon, Pause, Plus, Square, Sun, SunMoon } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import {
   formatClock,
@@ -19,7 +19,7 @@ function toggleTheme() {
 
 // Live state and next check-in come from the check-in controller (see lib/checkin/store.ts).
 export function StatusBar() {
-  const { nextDueMs, timeZone, mode } = useSyncExternalStore(
+  const { nextDueMs, timeZone, mode, routineName } = useSyncExternalStore(
     subscribeCheckin,
     getCheckinStatus,
     getServerCheckinStatus,
@@ -62,6 +62,12 @@ export function StatusBar() {
             <Pause className="lucide" aria-hidden />
             Busy
           </button>
+          {routineName && (
+            <button className="btn btn-secondary btn-sm" onClick={() => sendCommand("routine")} title={`Log "${routineName}" in one tap`}>
+              <Briefcase className="lucide" aria-hidden />
+              {routineName}
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => sendCommand("sleep")} title="Stop popups and log sleep">
             <Moon className="lucide" aria-hidden />
             Going to sleep

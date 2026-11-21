@@ -1,0 +1,216 @@
+"use client";
+
+import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { duration } from "@/components/checkin/checkin-modal";
+import { formatClock } from "@/lib/checkin/store";
+import type { Answers, Category, Question } from "@/lib/checkin/types";
+import { buildBlocks, type Block, type EntryRow } from "@/lib/time/blocks";
+import type { TrackedDay } from "@/lib/time";
+import { EntryEditor, type EditTarget } from "./entry-editor";
+
+export type TimelineEntry = EntryRow & { answers: Answers };
+
+type Props = {
+  day: TrackedDay;
+  prevDate: string;
+  /** null when this is the latest day (today). */
+  nextDate: string | null;
+  todayDate: string;
+  label: string;
+  nowMs: number;
+  timeZone: string;
+  dayStartHour: number;
+  entries: TimelineEntry[];
+  categories: Category[];
+  questions: Question[];
+};
+
+const minutes = (ms: number) => Math.round(ms / 60_000);
+
+// Hover card above a ribbon block, following the pointer horizontally (kept inside the window).
+function BlockTip({ tip, byId, timeZone }: { tip: { x: number; y: number; block: Block }; byId: Map<string, Category>; timeZone: string }) {
+  const { block: b } = tip;
+  const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
+  const kind = b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown");
+  const x = Math.min(Math.max(tip.x, 120), window.innerWidth - 120);
+  return (
+    <div className="tip" data-kind={kind} role="tooltip" style={{ left: x, top: tip.y - 8, transform: "translate(-50%, -100%)" }}>
+      <span className="tip-name">
+        <span className="dot" data-kind={kind} />
+        {b.type === "gap" ? (b.open ? "Now (being tracked)" : "Unknown") : (cat?.name ?? "Deleted category")}
+      </span>
+      <span className="tip-time">
+        {formatClock(b.startMs, timeZone)} – {formatClock(b.endMs, timeZone)}
+      </span>
+      <span className="tip-dur">
+        {duration(minutes(b.endMs - b.startMs))}
+        {b.type === "gap" && !b.open ? " · click to fill" : b.type === "entry" ? " · click to edit" : ""}
+      </span>
+    </div>
+  );
+}
+
+export function TimelineView(p: Props) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<EditTarget | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; block: Block } | null>(null);
+  const byId = new Map(p.categories.map((c) => [c.id, c]));
+  const entryById = new Map(p.entries.map((e) => [e.id, e]));
+  const blocks = buildBlocks(p.entries, p.day, p.nowMs);
+  const go = (date: string) => router.push(date === p.todayDate ? "/timeline" : `/timeline?date=${date}`);
+
+  const openBlock = (b: (typeof blocks)[number]) => {
+    if (b.type === "gap") return b.open ? undefined : setEditing({ kind: "gap", startMs: b.startMs, endMs: b.endMs });
+    const full = entryById.get(b.entry.id)!;
+    setEditing({
+      kind: "entry",
+      id: full.id,
+      categoryId: full.categoryId,
+      startMs: full.startMs,
+      endMs: full.endMs,
+      crossesDay: b.crossesDay,
+      answers: full.answers,
+    });
+  };
+
+  const axis = Array.from({ length: 9 }, (_, i) => ({ min: i * 180, label: formatClock(p.day.startMs + i * 180 * 60_000, p.timeZone) }));
+  const unknownMin = blocks.reduce((sum, b) => (b.type === "gap" ? sum + minutes(b.endMs - b.startMs) : sum), 0);
+
+  return (
+    <section className="page" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      <header className="row" style={{ flexWrap: "wrap" }}>
+        <h1 className="display" style={{ fontSize: "var(--text-xl)", fontWeight: 600 }}>
+          Timeline
+        </h1>
+        <span className="spacer" />
+        <button className="btn btn-secondary btn-icon btn-sm" onClick={() => go(p.prevDate)} aria-label="Previous day">
+          <ChevronLeft className="lucide" aria-hidden />
+        </button>
+        <input
+          type="date"
+          className="input"
+          style={{ width: "10.5rem", height: "2rem" }}
+          aria-label="Pick a day"
+          value={p.day.date}
+          max={p.todayDate}
+          onChange={(e) => e.target.value && e.target.value <= p.todayDate && go(e.target.value)}
+        />
+        <button className="btn btn-secondary btn-icon btn-sm" onClick={() => p.nextDate && go(p.nextDate)} disabled={!p.nextDate} aria-label="Next day">
+          <ChevronRight className="lucide" aria-hidden />
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => go(p.todayDate)} disabled={!p.nextDate}>
+          Today
+        </button>
+      </header>
+
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">{p.label}</h2>
+          <span className="spacer" />
+          <span className="sm muted">{unknownMin > 0 ? `${duration(unknownMin)} unknown` : "Everything logged"}</span>
+        </div>
+        <div className="ribbon" aria-hidden>
+          {blocks.map((b) => {
+            const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
+            return (
+              <div
+                key={b.type === "entry" ? b.entry.id : `gap-${b.startMs}`}
+                className="blk"
+                data-kind={b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown")}
+                style={{ "--s": minutes(b.startMs - p.day.startMs), "--d": minutes(b.endMs - b.startMs) } as React.CSSProperties}
+                onMouseMove={(e) => setTip({ x: e.clientX, y: e.currentTarget.getBoundingClientRect().top, block: b })}
+                onMouseLeave={() => setTip(null)}
+                onClick={() => openBlock(b)}
+              />
+            );
+          })}
+        </div>
+        <div className="axis" aria-hidden>
+          {axis.map((a) => (
+            <span key={a.min} style={{ left: `${(a.min / 1440) * 100}%`, whiteSpace: "nowrap" }}>
+              {a.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {tip && <BlockTip tip={tip} byId={byId} timeZone={p.timeZone} />}
+
+      <div className="card scroll" style={{ flex: 1 }}>
+        {blocks.length === 0 ? (
+          <p className="sm muted">Nothing here yet.</p>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: ".4rem" }}>
+            {blocks.map((b) => {
+              const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
+              const mins = minutes(b.endMs - b.startMs);
+              const open = b.type === "gap" && b.open;
+              return (
+                <li key={b.type === "entry" ? b.entry.id : `gap-${b.startMs}`}>
+                  <button
+                    type="button"
+                    className="row"
+                    data-kind={b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown")}
+                    onClick={() => openBlock(b)}
+                    disabled={open}
+                    style={{
+                      width: "100%",
+                      padding: ".55rem .8rem",
+                      gap: ".8rem",
+                      textAlign: "left",
+                      cursor: open ? "default" : "pointer",
+                      borderRadius: "var(--radius-md)",
+                      border: b.type === "gap" ? "1.5px dashed var(--border-strong)" : "1px solid color-mix(in srgb, var(--k) 45%, transparent)",
+                      borderLeft: b.type === "gap" ? undefined : "4px solid var(--k)",
+                      // Each row is tinted with its category's soft colour; Unknown stays hatched/neutral.
+                      background: b.type === "gap" ? "var(--hatch), var(--surface-sunken)" : "var(--k-soft)",
+                      color: b.type === "gap" ? undefined : "var(--k-ink)",
+                    }}
+                  >
+                    <span className="dot" />
+                    <span className="sm muted" style={{ width: "10.5rem", fontVariantNumeric: "tabular-nums" }}>
+                      {formatClock(b.startMs, p.timeZone)} – {formatClock(b.endMs, p.timeZone)}
+                    </span>
+                    <span style={{ fontWeight: 600, flex: 1 }}>
+                      {b.type === "gap" ? (open ? "Now: the next check-in covers this" : "Unknown") : (cat?.name ?? "Deleted category")}
+                    </span>
+                    {b.type === "entry" && b.entry.source === "backfill" && <span className="badge">filled later</span>}
+                    <span className="sm muted">{duration(mins)}</span>
+                    {b.type === "gap" ? (
+                      !open && (
+                        <span className="badge badge-info">
+                          <Plus className="lucide" aria-hidden /> Fill
+                        </span>
+                      )
+                    ) : (
+                      <Pencil className="lucide muted" aria-hidden />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {editing && (
+        <EntryEditor
+          key={editing.kind === "entry" ? editing.id : `gap-${editing.startMs}`}
+          target={editing}
+          day={p.day}
+          timeZone={p.timeZone}
+          dayStartHour={p.dayStartHour}
+          categories={p.categories}
+          questions={p.questions}
+          onCancel={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </section>
+  );
+}

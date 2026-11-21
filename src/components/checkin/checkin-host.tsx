@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { fieldsToAnswers } from "@/lib/checkin/answers";
+import { parseRoutineItems } from "@/lib/checkin/office";
 import type { Answers, Category, CategoryKind, EntryAnswerFields, Question, QuestionType, SystemKey } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/server";
 import type { BusyPreset } from "./busy-modal";
@@ -13,7 +14,7 @@ export async function CheckinHost() {
   const userId = claims?.claims.sub;
   if (!userId) return null;
 
-  const [profile, cats, qs, recent] = await Promise.all([
+  const [profile, cats, qs, recent, routines] = await Promise.all([
     supabase.from("profiles").select(
         "timezone, day_start_hour, checkin_interval_min, status, status_since, status_until, status_label, weekday_goal_min, weekend_goal_min, settings",
       ).eq("id", userId).single(),
@@ -28,8 +29,11 @@ export async function CheckinHost() {
       .select("category_id, end_at, planned, trigger, focus, phone_checks, mood_after, answers")
       .order("end_at", { ascending: false })
       .limit(150),
+    supabase.from("routines").select("name, items").order("sort_order").limit(1),
   ]);
   if (!profile.data || !cats.data || !qs.data || !recent.data) return null;
+  const routineRow = routines.data?.[0];
+  const routine = routineRow ? { name: routineRow.name, items: parseRoutineItems(routineRow.items) } : null;
 
   const categories: Category[] = cats.data.map((c) => ({ ...c, kind: c.kind as CategoryKind }));
   const questions: Question[] = qs.data.map((q) => ({
@@ -72,6 +76,8 @@ export async function CheckinHost() {
       weekdayGoalMin={profile.data.weekday_goal_min}
       weekendGoalMin={profile.data.weekend_goal_min}
       busyPresets={busyPresets}
+      settings={profile.data.settings}
+      routine={routine && routine.items.length > 0 ? routine : null}
       categories={categories}
       questions={questions}
       lastEndMs={newest ? Date.parse(newest.end_at) : null}

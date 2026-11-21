@@ -2,9 +2,9 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-21
+> Last updated: 2026-11-21 (Step 8 coded)
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5 and 6 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 7 — Schedules & Office day** (after the manual checks).
+**Current status:** v1 steps 0–2 and 4 done; Steps 3, 5, 6, 7 and 8 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 9 — Today dashboard.**
 
 ---
 
@@ -90,14 +90,21 @@ Each step has a check that proves it works.
 - **Still to check by hand:** Busy block popup at the end (needs a real wait); Sleep entry for a longer sleep; ignore 2 popups late at night → goes quiet
 - Known limits: an unanswered popup closes after one interval even if you were mid-way through filling it in; time before "Going to sleep" that was never logged stays Unknown (fill it from the Timeline in step 8); busy blocks are saved as normal check-ins (`source = checkin`)
 
-### Step 7 — Schedules & Office day
-- [ ] Weekday/weekend settings; during office hours popups every 2 h asking "Office as usual?"
-- [ ] "Office day" one tap from the routine (walk, bus, office 10–6, bus, walk)
-- **Check:** one tap creates all 5 entries; overlaps handled
+### Step 7 — Schedules & Office day (code done, manual check pending)
+- [x] Weekday/weekend office settings read from `profiles.settings.schedule` (`src/lib/checkin/office.ts`); inside office hours popups are due every `office_checkin_min` (2 h) and never run past office end; a slot fully inside office asks "Office as usual?" (Yes = whole slot as Office, Split = normal popup)
+- [x] "Office day" button in the status bar (name comes from the routine): one tap writes the routine's entries (`source = office_day`), cut around anything already logged, nothing in the future
+- Verified: lint + build + 41 unit tests (office window, due time, clipping/overlap cases); browser test (Chrome via Playwright): sign-up → one tap added 5 entries (09:20–18:40, correct categories, `office_day`), second tap says "Nothing to add", no console errors; DB rows checked, test user deleted
+- **Still to check by hand:** "Office as usual?" popup on a real weekday inside 10–18 (needs a wait); tap Office day when part of the day is already logged
+- Known limits: tapping in the morning only logs up to now (the rest is covered by the 2-hourly check-ins); time before the routine that was never logged stays Unknown (Timeline, step 8); office hours/routine are edited in Settings (step 10) — for now only in the database
 
-### Step 8 — Timeline page
-- [ ] Day picker, list of blocks, click to edit, click grey Unknown to fill (`source = backfill`)
-- **Check:** filled gap saved as backfill and shown on the ribbon
+### Step 8 — Timeline page (code done, manual check pending)
+- [x] Day picker (previous / next / date input / Today; `?date=YYYY-MM-DD`, never beyond today), 24 h ribbon from the day start, list of blocks (`src/lib/time/blocks.ts`, `src/components/timeline/`)
+- [x] Click an entry to change category, times and answers, or delete it (two-step); click a grey Unknown to fill it (`source = backfill`, shown with a "filled later" badge)
+- [x] Look: ribbon blocks show a custom hover card (`.tip` in `components.css`: category dot + name, time range, duration, "click to edit/fill") instead of the browser tooltip, and lift with a shadow; list rows are tinted with their category's soft colour (coloured left edge), Unknown rows are hatched like the ribbon
+- [x] The slot still being tracked right now ("Now: the next check-in covers this") can't be filled here, so a later check-in never overlaps it; the check-in controller moves its next slot forward if an edit makes an entry end later
+- Verified: lint + build + 47 unit tests (gaps, open slot, day-crossing entries, clock → time); browser test (Chrome via Playwright): list + ribbon show entries and Unknown gaps, filling 04:00–06:00 as Sleep saved a `backfill` entry and splits the gap, delete works, previous day loads, no console errors; test users deleted
+- **Still to check by hand:** edit an entry's category/answers; edit times so it overlaps a neighbour (should show an error); a sleep that crosses midnight (times are locked when it runs past this day's edges)
+- Known limits: "While doing" tags are not editable here yet; a whole empty day reads "3:00 AM – 3:00 AM"
 
 ### Step 9 — Today dashboard
 - [ ] Greeting with display name, free time card, study vs goal, free time left, 24 h ribbon, where time went, tracking %

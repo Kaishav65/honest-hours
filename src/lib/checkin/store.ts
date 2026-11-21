@@ -8,10 +8,16 @@ export type Mode = {
   untilMs: number | null;
 };
 
-export type CheckinStatus = { nextDueMs: number | null; timeZone: string; mode: Mode };
+export type CheckinStatus = {
+  nextDueMs: number | null;
+  timeZone: string;
+  mode: Mode;
+  /** Name of the one-tap routine ("Office day"), or null when the user has none. */
+  routineName: string | null;
+};
 
 const NORMAL: Mode = { status: "normal", label: null, sinceMs: null, untilMs: null };
-let state: CheckinStatus = { nextDueMs: null, timeZone: "Asia/Kolkata", mode: NORMAL };
+let state: CheckinStatus = { nextDueMs: null, timeZone: "Asia/Kolkata", mode: NORMAL, routineName: null };
 const listeners = new Set<() => void>();
 
 export const subscribeCheckin = (fn: () => void) => {
@@ -27,6 +33,7 @@ export function setCheckinStatus(next: CheckinStatus) {
   const same =
     next.nextDueMs === state.nextDueMs &&
     next.timeZone === state.timeZone &&
+    next.routineName === state.routineName &&
     next.mode.status === state.mode.status &&
     next.mode.label === state.mode.label &&
     next.mode.sinceMs === state.mode.sinceMs &&
@@ -36,7 +43,7 @@ export function setCheckinStatus(next: CheckinStatus) {
   listeners.forEach((fn) => fn());
 }
 
-export type Command = "log-now" | "busy" | "sleep" | "awake" | "end-busy";
+export type Command = "log-now" | "busy" | "sleep" | "awake" | "end-busy" | "routine";
 const EVENT = "hh:command";
 export const sendCommand = (command: Command) =>
   window.dispatchEvent(new CustomEvent<Command>(EVENT, { detail: command }));

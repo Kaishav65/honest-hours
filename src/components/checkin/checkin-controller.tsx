@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { answersToFields } from "@/lib/checkin/answers";
-import { floorToMinute, nextDueMs, slotStartMs } from "@/lib/checkin/schedule";
+import {
+  dueWithOffice,
+  isOfficeSlot,
+  officeWindow,
+  routineSegments,
+  type RoutineItem,
+} from "@/lib/checkin/office";
+import { floorToMinute, slotStartMs } from "@/lib/checkin/schedule";
 import {
   busyEndMs,
   isLateNight,
@@ -16,6 +23,8 @@ import { createClient } from "@/lib/supabase/client";
 import { dayOf, splitSlot } from "@/lib/time";
 import { BusyModal, type BusyChoice, type BusyPreset } from "./busy-modal";
 import { CheckinModal, type SavePart } from "./checkin-modal";
+import { NoticeModal } from "./notice-modal";
+import { OfficeModal } from "./office-modal";
 import { WakeModal, type WakeInput } from "./wake-modal";
 
 type Props = {
@@ -31,6 +40,10 @@ type Props = {
   weekdayGoalMin: number;
   weekendGoalMin: number;
   busyPresets: BusyPreset[];
+  /** profiles.settings (office hours per day type). */
+  settings: unknown;
+  /** The one-tap routine (e.g. "Office day"), or null. */
+  routine: { name: string; items: RoutineItem[] } | null;
   categories: Category[];
   questions: Question[];
   lastEndMs: number | null;
@@ -38,7 +51,14 @@ type Props = {
   lastAnswers: Record<string, Answers>;
 };
 
-type Prompt = { startMs: number; endMs: number; promptedAt: number; subtitle?: string };
+type Prompt = {
+  startMs: number;
+  endMs: number;
+  promptedAt: number;
+  subtitle?: string;
+  /** Slot lies inside office hours: ask the short "Office as usual?" first. */
+  office?: boolean;
+};
 type Status = Mode["status"];
 
 // Written to profiles.status_label when the app went quiet by itself (we don't know when sleep began).
@@ -72,9 +92,18 @@ export function CheckinController(props: Props) {
   const [wakeOpen, setWakeOpen] = useState(false);
   const [busyOpen, setBusyOpen] = useState(false);
   const missedInARow = useRef(0);
+  const routineBusy = useRef(false);
   const [, bump] = useState(0);
 
-  const due = slotStart === null ? null : nextDueMs(slotStart, lastPrompt, intervalMin);
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
+  const officeCat = categories.find((c) => c.kind === "work");
+
+  // A skipped popup waits one more interval; the slot itself keeps growing. Office hours use a longer interval.
+  const dueBase = slotStart === null ? null : Math.max(slotStart, lastPrompt ?? 0);
+  const due =
+    dueBase === null
+      ? null
+      : dueWithOffice(dueBase, intervalMin, officeWindow(dueBase, timeZone, dayStartHour, props.settings));
   const active = mode.status === "normal" && !wakeOpen && !busyOpen;
 
   useEffect(() => {
@@ -87,12 +116,28 @@ export function CheckinController(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on mount
   }, []);
 
+  // Entries edited on the Timeline page change what's already logged: the next slot may never start
+  // before the newest entry's end, or saving a check-in would overlap it.
+  useEffect(() => {
+    const newest = props.lastEndMs;
+    if (newest === null) return;
+    const id = setTimeout(() => {
+      setLastEndMs((v) => Math.max(v ?? 0, newest));
+      setSlotStart((s) => (s === null ? s : Math.max(s, newest)));
+    }, 0);
+    return () => clearTimeout(id);
+  }, [props.lastEndMs]);
+
   const openPrompt = useCallback(
     (subtitle?: string) => {
       const now = Date.now();
       const endMs = floorToMinute(now);
       if (slotStart === null || endMs - slotStart < 60_000) return;
-      setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle });
+      const office =
+        !subtitle &&
+        officeCat !== undefined &&
+        isOfficeSlot({ startMs: slotStart, endMs }, officeWindow(slotStart, timeZone, dayStartHour, props.settings));
+      setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle, office });
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         const n = new Notification("Honest Hours", {
           body: `What did you do since ${formatClock(slotStart, timeZone)}?`,
@@ -101,7 +146,8 @@ export function CheckinController(props: Props) {
         n.onclick = () => window.focus();
       }
     },
-    [slotStart, timeZone],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settings/officeCat are fixed props
+    [slotStart, timeZone, dayStartHour],
   );
 
   async function updateStatus(next: Mode) {
@@ -127,8 +173,8 @@ export function CheckinController(props: Props) {
 
   // Show the live state and next check-in time in the status bar.
   useEffect(() => {
-    setCheckinStatus({ nextDueMs: active ? due : null, timeZone, mode });
-  }, [due, active, timeZone, mode]);
+    setCheckinStatus({ nextDueMs: active ? due : null, timeZone, mode, routineName: props.routine?.name ?? null });
+  }, [due, active, timeZone, mode, props.routine?.name]);
 
   // Open the popup when due. Checked on a timer and whenever the tab becomes visible again.
   useEffect(() => {
@@ -196,6 +242,70 @@ export function CheckinController(props: Props) {
     };
   }, [mode.status, mode.untilMs, endBusy]);
 
+  // One tap: write the routine (e.g. Office day) for today as entries. Parts of the routine that
+  // overlap something already logged are cut out, and the part still in the future is not logged.
+  async function runRoutine() {
+    const routine = props.routine;
+    if (!routine || routineBusy.current) return;
+    routineBusy.current = true;
+    try {
+      const supabase = createClient();
+      const now = Date.now();
+      const day = dayOf(now, timeZone, dayStartHour);
+      const { data: existing, error: readError } = await supabase
+        .from("entries")
+        .select("start_at, end_at")
+        .lt("start_at", new Date(day.endMs).toISOString())
+        .gt("end_at", new Date(day.startMs).toISOString());
+      if (readError || !existing) {
+        setNotice({ title: routine.name, message: "Couldn't read today's entries. Check your connection and try again." });
+        return;
+      }
+      const segments = routineSegments(
+        routine.items,
+        day.date,
+        timeZone,
+        dayStartHour,
+        now,
+        existing.map((e) => ({ startMs: Date.parse(e.start_at), endMs: Date.parse(e.end_at) })),
+      );
+      if (segments.length === 0) {
+        setNotice({ title: routine.name, message: "Nothing to add: this time is already logged, or hasn't happened yet." });
+        return;
+      }
+      const { error } = await supabase.from("entries").insert(
+        segments.map((s) => ({
+          category_id: s.categoryId,
+          start_at: new Date(s.startMs).toISOString(),
+          end_at: new Date(s.endMs).toISOString(),
+          source: "office_day",
+          answers: s.answers,
+        })),
+      );
+      if (error) {
+        setNotice({
+          title: routine.name,
+          message:
+            error.code === "23P01"
+              ? "Something changed while saving. Reload the page and try again."
+              : "Couldn't save. Check your connection and try again.",
+        });
+        return;
+      }
+      // Next check-in starts after the routine; time before it that was never logged stays Unknown.
+      const newEnd = Math.max(...segments.map((s) => s.endMs));
+      setLastEndMs((v) => Math.max(v ?? 0, newEnd));
+      setSlotStart((s) => Math.max(s ?? 0, newEnd));
+      setLastPrompt(null);
+      setNotice({
+        title: routine.name,
+        message: `Added ${segments.length} ${segments.length === 1 ? "entry" : "entries"} to today.`,
+      });
+    } finally {
+      routineBusy.current = false;
+    }
+  }
+
   // Commands from the status bar and the L key.
   useEffect(() => {
     const run = (command: string) => {
@@ -206,6 +316,7 @@ export function CheckinController(props: Props) {
         updateStatus({ status: "sleeping", label: null, sinceMs: floorToMinute(Date.now()), untilMs: null });
       }
       if (command === "awake" && mode.status === "sleeping") setWakeOpen(true);
+      if (command === "routine" && !prompt && mode.status === "normal") runRoutine();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "l" || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
@@ -346,7 +457,21 @@ export function CheckinController(props: Props) {
 
   return (
     <>
-      {prompt && (
+      {prompt?.office && officeCat && (
+        <OfficeModal
+          key={prompt.promptedAt}
+          startMs={prompt.startMs}
+          endMs={prompt.endMs}
+          timeZone={timeZone}
+          onYes={() =>
+            save([{ categoryId: officeCat.id, minutes: null, tagIds: [], answers: lastAnswers[officeCat.id] ?? {} }])
+          }
+          onSplit={() => setPrompt({ ...prompt, office: false })}
+          onSkip={skip}
+        />
+      )}
+      {notice && <NoticeModal title={notice.title} message={notice.message} onClose={() => setNotice(null)} />}
+      {prompt && !prompt.office && (
         <CheckinModal
           key={prompt.promptedAt}
           startMs={prompt.startMs}
