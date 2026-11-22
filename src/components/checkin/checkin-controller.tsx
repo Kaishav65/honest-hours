@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { answersToFields } from "@/lib/checkin/answers";
 import {
@@ -76,6 +77,8 @@ const toStatus = (s: string): Status => (s === "busy" || s === "sleeping" ? s : 
 // check-in covers 70 minutes.
 export function CheckinController(props: Props) {
   const { userId, timeZone, dayStartHour, intervalMin, categories, questions } = props;
+  // Re-render the server-rendered pages (Today, Timeline) after a save, so new entries show without a reload.
+  const router = useRouter();
   // The clock is only read after mount (never while rendering), so server rendering stays stable.
   const [slotStart, setSlotStart] = useState<number | null>(null);
   const [lastEndMs, setLastEndMs] = useState(props.lastEndMs);
@@ -297,6 +300,7 @@ export function CheckinController(props: Props) {
       setLastEndMs((v) => Math.max(v ?? 0, newEnd));
       setSlotStart((s) => Math.max(s ?? 0, newEnd));
       setLastPrompt(null);
+      router.refresh();
       setNotice({
         title: routine.name,
         message: `Added ${segments.length} ${segments.length === 1 ? "entry" : "entries"} to today.`,
@@ -388,6 +392,7 @@ export function CheckinController(props: Props) {
       ? await supabase.from("day_logs").update(dayFields).eq("day", day.date)
       : await supabase.from("day_logs").insert({ day: day.date, study_goal_min: goal, ...dayFields });
     if (logResult.error) console.error("Day log not saved:", logResult.error.message);
+    router.refresh(); // the sleep entry and day log are saved even if the status update below fails
 
     const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
     if (err) return err;
@@ -435,6 +440,7 @@ export function CheckinController(props: Props) {
       }),
     ]);
     secondary.forEach((r) => r?.error && console.error("Check-in extras not saved:", r.error.message));
+    router.refresh();
 
     const lastPart = parts[parts.length - 1];
     setLastEntry({ categoryId: lastPart.categoryId, answers: lastPart.answers });

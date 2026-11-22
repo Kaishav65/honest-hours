@@ -2,7 +2,7 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-22 (Step 11: PWA manifest + icons done, Vercel deploy next)
+> Last updated: 2026-11-22 (Step 11: PWA manifest + icons done; pages refresh after check-in saves; Vercel deploy next)
 
 **Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 11 — Install & deploy (PWA + Vercel).**
 
@@ -113,6 +113,7 @@ Each step has a check that proves it works.
 - [x] All formulas in `src/lib/insights/today.ts` (pure, 10 unit tests with a hand-calculated day); styles ported from the design system into `components.css`
 - Verified: lint + build + 57 tests; browser test (Chrome via Playwright, 1366×768, no page scroll, no console errors): after one Office day tap the numbers match (Office 8h, Commute 1h 20m, 0 study, tracked % = logged ÷ minutes passed)
 - **Still to check by hand:** a day with study + Instagram (wasted / free time tiles), dark mode, 1920×1080
+- [x] Live update: check-in, Office day and "I'm awake" saves call `router.refresh()`, so Today/Timeline show the new entry without a reload (lint + build + 57 tests; not yet browser-checked)
 - Known limits: "While doing" tags aren't counted in the tiles; "free time left" shows "N needed of 0 possible" once you're past your usual sleep time
 - **Left for v2 (in the design but not built on Today):** Coach card with messages; streak + freeze on the Study tile and status bar; "Today's one goal" note (from the morning plan); goal on-track badge ("Close · 92% at usual pace", needs 7+ days of data); "Entries" recent-list card on wide screens (≥ 86rem); "While doing" line under Where time went (YouTube during Dinner, not counted twice); focus/discipline scores
 
