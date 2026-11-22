@@ -10,6 +10,7 @@ import {
   routineSegments,
   type RoutineItem,
 } from "@/lib/checkin/office";
+import { armChime, playChime } from "@/lib/checkin/chime";
 import { floorToMinute, slotStartMs } from "@/lib/checkin/schedule";
 import {
   busyEndMs,
@@ -131,6 +132,9 @@ export function CheckinController(props: Props) {
     return () => clearTimeout(id);
   }, [props.lastEndMs]);
 
+  // Sound needs a first click/key press on the page before the browser allows it.
+  useEffect(() => armChime(), []);
+
   const openPrompt = useCallback(
     (subtitle?: string) => {
       const now = Date.now();
@@ -141,6 +145,7 @@ export function CheckinController(props: Props) {
         officeCat !== undefined &&
         isOfficeSlot({ startMs: slotStart, endMs }, officeWindow(slotStart, timeZone, dayStartHour, props.settings));
       setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle, office });
+      if (document.hidden) playChime();
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         const n = new Notification("Honest Hours", {
           body: `What did you do since ${formatClock(slotStart, timeZone)}?`,
