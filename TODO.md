@@ -20,7 +20,7 @@
 
 ### Accounts & services
 - [x] Supabase project `honest-hours` in **Mumbai (ap-south-1)**
-  - Confirm email **off** (no emails sent), Secure email change off, Require current password on, min password 8, magic links off
+  - Confirm email **off** (no emails sent), Secure email change off, Require current password on, min password 8 (kept at 8 on purpose; login friction is handled by long sessions + password-manager autofill), magic links off
 - [x] GitHub repo (public): https://github.com/Kaishav65/honest-hours (branch `main`)
 - [x] GitHub CLI installed and logged in (`C:\Program Files\GitHub CLI\gh.exe`)
 - [x] Invite codes removed (2026-11-21): open sign-up with a hard cap of 50 users

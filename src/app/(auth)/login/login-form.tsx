@@ -11,7 +11,7 @@ export function LoginForm() {
       <h1 className="card-title">Welcome back</h1>
       <div className="field">
         <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" className="input" autoComplete="email" required autoFocus />
+        <input id="email" name="email" type="email" className="input" autoComplete="username" required autoFocus />
       </div>
       <div className="field">
         <label htmlFor="password">Password</label>

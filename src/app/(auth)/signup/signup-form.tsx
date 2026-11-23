@@ -25,7 +25,7 @@ export function SignupForm() {
       </div>
       <div className={cls("email")}>
         <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" className="input" autoComplete="email" required />
+        <input id="email" name="email" type="email" className="input" autoComplete="username" required />
         {state?.field === "email" && <span className="help">{state.error}</span>}
       </div>
       <div className={cls("password")}>
