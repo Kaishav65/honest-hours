@@ -32,7 +32,25 @@ const TYPES: { value: QuestionType; label: string }[] = [
   { value: "time", label: "Time" },
 ];
 const defaultValue = (k: CategoryKind): CategoryValue => (k === "study" ? "productive" : k === "entertainment" ? "waste" : "neutral");
-const kindLabel = (k: string) => KINDS.find((x) => x.value === k)?.label.split(" (")[0] ?? k;
+const KIND_HINTS: Record<CategoryKind, string> = {
+  study: "Counts toward your daily study goal and streak.",
+  work: "Work time (office, jobs). Not part of your free time.",
+  commute: "Travel time. Not part of your free time.",
+  routine: "Everyday routines like meals and getting ready.",
+  chore: "Household chores.",
+  entertainment: "Free time spent on fun. \"Waste\" entertainment that you didn't plan shows up as wasted time.",
+  rest: "Free time that isn't study (rest, walks, exercise, reading for fun). Doesn't count toward your study goal.",
+  sleep: "Sleep. Used for your usual bedtime.",
+};
+/** A warning when kind and "Counts as" don't fit together (they change scores differently). */
+function mismatchWarning(kind: CategoryKind, value: CategoryValue): string | null {
+  if (kind === "study" && value !== "productive") return "Study time is normally Productive.";
+  if ((kind === "rest" || kind === "entertainment") && value === "productive")
+    return "This won't count toward your study goal, but scores may treat it as productive time. If it's study, create it as Study instead.";
+  if (kind !== "entertainment" && value === "waste") return "Only Entertainment is normally Waste. Wasted time is shown on Today.";
+  return null;
+}
+const kindLabel =(k: string) => KINDS.find((x) => x.value === k)?.label.split(" (")[0] ?? k;
 
 type Props = { categories: SettingsCategory[]; questions: SettingsQuestion[]; onChanged: () => void };
 
@@ -169,7 +187,7 @@ function NewCategory({ onCreate, onCancel }: { onCreate: (c: { name: string; ico
               <option key={k.value} value={k.value}>{k.label}</option>
             ))}
           </select>
-          <span className="help">Scores and totals use this, not the name.</span>
+          <span className="help">{KIND_HINTS[kind]} Can&apos;t be changed later.</span>
         </div>
         <div className="field">
           <label htmlFor="nc-value">Counts as</label>
@@ -180,6 +198,11 @@ function NewCategory({ onCreate, onCancel }: { onCreate: (c: { name: string; ico
           </select>
         </div>
       </div>
+      {mismatchWarning(kind, value) && (
+        <p className="sm" role="status" style={{ color: "var(--danger)" }}>
+          {mismatchWarning(kind, value)}
+        </p>
+      )}
       <div className="field">
         <label>Icon</label>
         <IconPicker value={icon} onChange={setIcon} />
