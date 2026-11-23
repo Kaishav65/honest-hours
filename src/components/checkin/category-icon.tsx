@@ -19,6 +19,7 @@ import {
   Users,
   Utensils,
   WashingMachine,
+  Waves,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ const ICONS: Record<string, LucideIcon> = {
   users: Users,
   utensils: Utensils,
   "washing-machine": WashingMachine,
+  waves: Waves,
 };
 
 /** Icons a user can pick for a category (everything in the map above). */

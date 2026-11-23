@@ -74,7 +74,21 @@ export function CategoriesTab({ categories, questions, onChanged }: Props) {
       {adding && (
         <NewCategory
           onCreate={async (c) => {
-            const ok = await run(createClient().from("categories").insert({ ...c, sort_order: nextSort }));
+            const supabase = createClient();
+            // Entertainment categories get the built-in questions, so "wasted" (waste time that
+            // wasn't planned), triggers and mood after are recorded for them like for Instagram.
+            const ok = await run(
+              (async () => {
+                const { data, error: err } = await supabase.from("categories").insert({ ...c, sort_order: nextSort }).select("id").single();
+                if (err || !data) return { error: err ?? { message: "no row" } };
+                if (c.kind !== "entertainment") return { error: null };
+                return supabase.from("category_questions").insert([
+                  { category_id: data.id, label: "Planned?", type: "yes_no", system_key: "planned", sort_order: 10 },
+                  { category_id: data.id, label: "Why?", type: "single_choice", options: ["bored", "tired", "stressed", "habit", "break"], system_key: "trigger", sort_order: 20 },
+                  { category_id: data.id, label: "Mood after", type: "single_choice", options: ["better", "same", "worse"], system_key: "mood_after", sort_order: 30 },
+                ]);
+              })(),
+            );
             if (ok) setAdding(false);
             return ok;
           }}
