@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { answersToFields } from "@/lib/checkin/answers";
+import { mergeWake } from "@/lib/checkin/day-log";
 import {
   dueWithOffice,
   isOfficeSlot,
@@ -258,7 +259,7 @@ export function CheckinController(props: Props) {
     routineBusy.current = true;
     try {
       const supabase = createClient();
-      const now = Date.now();
+      const now = floorToMinute(Date.now()); // whole minutes, like check-in slots, so later slots don't inherit stray seconds
       const day = dayOf(now, timeZone, dayStartHour);
       const { data: existing, error: readError } = await supabase
         .from("entries")
@@ -392,9 +393,14 @@ export function CheckinController(props: Props) {
       sleep_quality: input.quality,
       planned_study_min: input.planMin,
     };
-    const existing = await supabase.from("day_logs").select("day").eq("day", day.date).maybeSingle();
+    // The first wake of the day wins: a later "I'm awake" (after a nap) must not replace the morning wake time or plan.
+    const existing = await supabase
+      .from("day_logs")
+      .select("wake_at, sleep_quality, planned_study_min")
+      .eq("day", day.date)
+      .maybeSingle();
     const logResult = existing.data
-      ? await supabase.from("day_logs").update(dayFields).eq("day", day.date)
+      ? await supabase.from("day_logs").update(mergeWake(existing.data, dayFields)).eq("day", day.date)
       : await supabase.from("day_logs").insert({ day: day.date, study_goal_min: goal, ...dayFields });
     if (logResult.error) console.error("Day log not saved:", logResult.error.message);
     router.refresh(); // the sleep entry and day log are saved even if the status update below fails

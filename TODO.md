@@ -2,9 +2,9 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-22 (Step 11: PWA manifest + icons done; pages refresh after check-in saves; Vercel deploy next)
+> Last updated: 2026-11-26 (data audit after 5 days of real use: all numbers verified; Office-day whole-minute fix; Vercel deploy done; the 24 Nov migrations are applied — see "Audit 2026-11-26")
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded and were smoke-tested in a real browser (Chrome via Playwright); a quick manual look from you is still welcome. **Next: Step 11 — Install & deploy (PWA + Vercel).**
+**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded, smoke-tested in a real browser (Chrome via Playwright) and in daily use since 2026-11-21. Step 11: PWA + Vercel deploy done (deploy reported by the user, not checked in this session); installing the PWA from the live URL still to confirm. **Next: v2 — Focus & coaching** (see "Later").
 
 ---
 
@@ -131,8 +131,48 @@ Each step has a check that proves it works.
 
 ### Step 11 — Install & deploy
 - [x] PWA manifest + icons (installs as its own window): Sprout-on-sage icon (tab, home screen, installed app), `src/app/manifest.ts`, page titles on every page; manifest/icons are public in `src/proxy.ts`. Verified: build + 57 tests; manifest and icons return 200 when logged out
-- [ ] Deploy to Vercel with env vars
-- **Check:** installs from the live URL and works end to end
+- [x] Deploy to Vercel with env vars (done by the user; running)
+- **Check:** installs from the live URL and works end to end — install as PWA from the live URL not yet confirmed
+
+---
+
+## Session log 2026-11-24 — categories, Settings hints, password decision
+
+**Still to do from this session (in order):**
+1. ~~Apply the two new migrations~~ — **done** (confirmed 2026-11-26: the real account has Instagram / TikTok / Facebook / Snapchat / Walking / Swimming / Reading and their questions).
+2. ~~Then browser-test~~ — partly confirmed by real use (Planned? / Why? / Mood after are saved on social-app entries). Still to check: popup shows Instagram / TikTok / Facebook / Snapchat / Walking / Swimming / Reading; Instagram etc. ask Planned? / Why? / Mood after; Settings → New category shows the kind hint and the mismatch warning; a new Entertainment category auto-gets the three built-in questions; a Planned? answer on a social app is saved to `entries.planned` and affects "Wasted today".
+
+**Decisions made (and why):**
+- **Each social app is its own category** (not one "Social Media" category + a "Which app" question). Totals, Timeline colours, "Wasted today" and coach messages (PLAN §12, e.g. "1h of unplanned Instagram") all group by category; an answer on an entry is not visible to them. Users who don't use an app can archive it (hidden from the popup, history kept). A v2 "group" field (e.g. Social media rolling up the apps) is the planned way to get a combined total.
+- **Built-in questions need `system_key`** (`planned`, `trigger`, `mood_after`): they are saved to their own entry columns, and "Wasted today" = waste-value time where `planned` is not true (`src/lib/insights/today.ts`). A "Planned?" question added by hand has no system key, so it would never feed wasted time. That's why seeding / auto-adding sets the keys.
+- **Kind vs "Counts as":** the kind drives the study goal, streak, free time and sleep logic; "Counts as" (productive / neutral / waste) drives "wasted" and, later, scores. Kind can't be changed after creation. Walking / Swimming = `rest` + neutral. Reading = `rest` + productive (free time, does NOT count toward the study goal; reading for study should be logged under Study).
+- **Password minimum stays 8.** A 4-character minimum was tried and reverted (too weak for a public app). Login friction is handled by: sessions that last 400 days (library default, refreshed by `src/proxy.ts`; do NOT enable Supabase's time-box / inactivity session limits) and password-manager friendly forms (email field `autocomplete="username"`).
+
+**Files changed:**
+- `supabase/migrations/20261124000000_social_apps_and_exercise.sql` — new `seed_defaults` (Instagram 60, TikTok 62, Facebook 64, Snapchat 66 each with Planned? / Why? / Mood after; Walking 92 + Swimming 94 as rest/neutral); backfills all existing users; renames a user's "Social Media" back to "Instagram" and archives its "Which app you used" question.
+- `supabase/migrations/20261124120000_reading_category.sql` — `seed_defaults` again with Reading (96, rest, productive, text question "What are you reading?"); adds it for users who don't already have a "Reading" category (the user's own one is left alone).
+- `src/components/checkin/category-icon.tsx` — added the `waves` icon (Swimming).
+- `src/components/settings/categories-tab.tsx` — creating an Entertainment category also inserts the three built-in questions; New category form shows a one-line hint per kind (and "can't be changed later") and a red warning for odd kind + value combos (Study ≠ productive; Rest/Entertainment + productive; non-Entertainment + waste). Warning only, saving is still allowed.
+- `src/app/(auth)/login/login-form.tsx`, `src/app/(auth)/signup/signup-form.tsx` — email `autoComplete="username"`.
+- Password length files (`actions.ts`, `signup-form.tsx`, `account-tab.tsx`) were changed to 4 and changed back to 8 — net no change.
+
+**Verified:** `tsc` and eslint pass. Playwright (Chrome, dev server on :3000, nothing written to the DB): login/signup autocomplete attributes, 8-char hint and `minlength`, server rejects 5- and 7-char passwords, wrong-password message, logged-out redirect, no console errors — 12/12. **Not verified:** the two migrations (never run against a database) and all logged-in Settings / popup changes (needs step 2 above). Playwright isn't a project dependency; it was installed in a scratch folder with system Chrome (`channel: "chrome"`).
+
+---
+
+## Audit 2026-11-26 — 5 days of real data (21–26 Nov)
+
+**Verified correct** (independent recalculation from the raw rows vs. the app, via Playwright): Today tiles, "Where time went", tracked %, unknown time and Timeline totals for all 6 days; no overlapping entries or orphan categories; 57 unit tests pass.
+
+**Fixed:** "Office day" saved entries ending at the exact current second (`runRoutine` now floors `now` to the minute), which gave the next check-in entries stray seconds (e.g. `:41`). Existing rows from 24 and 26 Nov keep their odd seconds (under a minute, harmless).
+
+**Also fixed:** `day_logs.wake_at` / sleep quality / plan were overwritten by every "I'm awake", including after a nap. Now the first wake of the day wins and later taps only fill empty fields (`mergeWake` in `src/lib/checkin/day-log.ts`, 4 unit tests; 61 tests pass). Not browser-tested (it would write a sleep entry to the real account). The existing 22 Nov row still holds the 9:15 PM nap wake (morning wake was 7:53 AM; fix by hand if wanted).
+
+**Known issues, not fixed (decide before v2):**
+- Usual sleep ("sleep ~12:00 AM") is the default until 3 bedtimes exist, and bedtimes after the 3 AM day start (e.g. 3:25 AM) are ignored by `usualSleepMs`, so it will lean earlier than reality.
+- "Wasted … N sessions" counts entries, not sessions: three back-to-back 30-min Instagram slots = 3. The v2 drift messages (`drift_1/2/3`) must merge adjacent same-category entries first.
+- An unanswered "Planned?" counts as unplanned (wasted), by design (§11).
+- After a day with nothing logged, the next slot starts at the day start (3 AM), so the gap stays Unknown (25 Nov: 17 h) until filled from the Timeline; check-in slots that start at 3:00 AM make sleep look like it began at 3:00.
 
 ---
 
@@ -167,5 +207,6 @@ Each step has a check that proves it works.
 - **Styling:** use the design system classes in `src/styles/components.css` (`.btn`, `.card`, `.chip`, …), not shadcn styling, so the Notebook skin can override them later.
 - **Changes from PLAN §3:** no "Wake up" category ("I'm awake" button instead); Movie / Series asks "Planned?"; question type `number` for phone checks.
 - **Next.js 16:** APIs differ from older versions; read `node_modules/next/dist/docs/` before using a new API (see [AGENTS.md](AGENTS.md)).
+- **Playwright** is a devDependency (installed 2026-11-26, v1.65). No browser download needed: launch with `chromium.launch({ channel: "chrome" })` (system Chrome). Start `npm run dev`, log in with env vars (`HH_EMAIL`, `HH_PW`), never write credentials into files; keep scratch scripts and saved sessions (`storageState`) out of the repo and delete them afterwards. Login form: fill `#email`, `#password`, click the "Log in" button. Don't write test data to a real account; use a throwaway sign-up and delete it.
 - **Node:** 24 LTS via nvm-windows (`nvm use 24.22.3`); pinned in `package.json` engines (`24.x`) and `.nvmrc`. The old winget Node 21 was uninstalled.
 - **Category kinds:** the same 8 names everywhere (database, CSS `data-kind`, tokens `--cat-*`): sleep, study, work, commute, routine, chore, entertainment, rest. `busy` and `unknown` are UI-only states.
