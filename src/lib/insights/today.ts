@@ -53,16 +53,20 @@ export function computeToday(input: {
   const byCat = new Map<string, { categoryId: string; kind: CategoryKind; min: number }>();
   let wastedMin = 0;
   let wastedSessions = 0;
-  for (const e of entries) {
+  // A session is a run of back-to-back unplanned entries of the same category (three 30-min Instagram slots = 1).
+  let lastWaste = null as { categoryId: string; endMs: number } | null;
+  for (const e of [...entries].sort((a, b) => a.startMs - b.startMs)) {
     const min = clippedMin(e, day.startMs, to);
     if (min <= 0) continue;
     const row = byCat.get(e.categoryId) ?? { categoryId: e.categoryId, kind: e.kind, min: 0 };
     row.min += min;
     byCat.set(e.categoryId, row);
-    if (e.value === "waste" && e.planned !== true) {
+    const wasted = e.value === "waste" && e.planned !== true;
+    if (wasted) {
       wastedMin += min;
-      wastedSessions += 1;
+      if (lastWaste?.categoryId !== e.categoryId || e.startMs > lastWaste.endMs) wastedSessions += 1;
     }
+    lastWaste = wasted ? { categoryId: e.categoryId, endMs: e.endMs } : null;
   }
   const byCategory = [...byCat.values()].sort((a, b) => b.min - a.min);
   const ofKind = (k: CategoryKind) => byCategory.filter((c) => c.kind === k).reduce((s, c) => s + c.min, 0);
@@ -95,17 +99,23 @@ export function computeToday(input: {
 
 /** Sleep starting at or after this many hours into the tracked day (8 PM with a 3 AM start) counts as "going to bed". */
 const BEDTIME_FROM_HOUR = 17;
+/** Sleep starting in the first hours of a tracked day (3–7 AM) is a late bedtime for the night before. */
+const LATE_BEDTIME_UNTIL_HOUR = 4;
 const DEFAULT_BEDTIME_HOUR = 21; // midnight with a 3 AM day start
 const MIN_SAMPLES = 3;
 
 /**
  * Usual sleep time on `day`: the median bedtime of recent sleep entries, or midnight until there's enough data.
- * Naps and early-morning sleep (starting before ~8 PM) are ignored.
+ * Bedtimes after the day start (e.g. 3:25 AM) count for the night before, so the result can be past `day.endMs`.
+ * Naps (starting between ~7 AM and ~8 PM) are ignored, and so is sleep starting exactly at the day start:
+ * that is a check-in slot that began there after a gap, not a real bedtime.
  */
 export function usualSleepMs(sleepStarts: number[], day: TrackedDay, timeZone: string, dayStartHour: number) {
   const offsets = sleepStarts
     .map((s) => (s - dayOf(s, timeZone, dayStartHour).startMs) / MIN)
-    .filter((o) => o >= BEDTIME_FROM_HOUR * 60)
+    .flatMap((o) =>
+      o >= BEDTIME_FROM_HOUR * 60 ? [o] : o > 0 && o < LATE_BEDTIME_UNTIL_HOUR * 60 ? [o + 24 * 60] : [],
+    )
     .sort((a, b) => a - b);
   if (offsets.length < MIN_SAMPLES) return day.startMs + DEFAULT_BEDTIME_HOUR * 60 * MIN;
   const mid = Math.floor(offsets.length / 2);

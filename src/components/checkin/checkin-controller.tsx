@@ -52,6 +52,8 @@ type Props = {
   lastEndMs: number | null;
   lastEntry: LastEntry | null;
   lastAnswers: Record<string, Answers>;
+  /** For the status bar. */
+  streak: { days: number; freezes: number };
 };
 
 type Prompt = {
@@ -66,6 +68,9 @@ type Status = Mode["status"];
 
 // Written to profiles.status_label when the app went quiet by itself (we don't know when sleep began).
 const AUTO_QUIET = "auto-quiet";
+// Opening the app on a new day with nothing logged for this long asks "When did you sleep / wake?"
+// instead of starting the first slot at the day start (which made sleep look like it began at 3:00 AM).
+const MORNING_GAP_MIN = 180;
 
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -95,6 +100,8 @@ export function CheckinController(props: Props) {
     untilMs: props.statusUntilMs,
   });
   const [wakeOpen, setWakeOpen] = useState(false);
+  /** Last entry's end when the Good-morning popup opened after a gap (not sleeping), else null. */
+  const [gapSince, setGapSince] = useState<number | null>(null);
   const [busyOpen, setBusyOpen] = useState(false);
   const missedInARow = useRef(0);
   const routineBusy = useRef(false);
@@ -113,7 +120,20 @@ export function CheckinController(props: Props) {
 
   useEffect(() => {
     const id = setTimeout(() => {
-      setSlotStart((s) => s ?? slotStartMs(props.lastEndMs, Date.now(), timeZone, dayStartHour));
+      const now = Date.now();
+      const last = props.lastEndMs;
+      if (
+        props.status === "normal" &&
+        last !== null &&
+        last < dayOf(now, timeZone, dayStartHour).startMs &&
+        now - last >= MORNING_GAP_MIN * 60_000
+      ) {
+        // The slot starts once the popup is answered (at the wake time) or skipped (now).
+        setGapSince(last);
+        setWakeOpen(true);
+        return;
+      }
+      setSlotStart((s) => s ?? slotStartMs(last, now, timeZone, dayStartHour));
       // A night's sleep ends with the "I'm awake" popup, which opens by itself when the app loads while sleeping.
       if (props.status === "sleeping") setWakeOpen(true);
     }, 0);
@@ -182,8 +202,14 @@ export function CheckinController(props: Props) {
 
   // Show the live state and next check-in time in the status bar.
   useEffect(() => {
-    setCheckinStatus({ nextDueMs: active ? due : null, timeZone, mode, routineName: props.routine?.name ?? null });
-  }, [due, active, timeZone, mode, props.routine?.name]);
+    setCheckinStatus({
+      nextDueMs: active ? due : null,
+      timeZone,
+      mode,
+      routineName: props.routine?.name ?? null,
+      streak: props.streak,
+    });
+  }, [due, active, timeZone, mode, props.routine?.name, props.streak]);
 
   // Open the popup when due. Checked on a timer and whenever the tab becomes visible again.
   useEffect(() => {
@@ -353,15 +379,25 @@ export function CheckinController(props: Props) {
     return err;
   }
 
+  // "I'm awake" after sleeping, or the Good-morning popup after a gap (`gapSince`; status stays normal).
   async function wake(input: WakeInput): Promise<string | null> {
-    if (mode.status !== "sleeping" || mode.sinceMs === null) return null;
+    const gap = mode.status !== "sleeping";
+    const since = gap ? gapSince : mode.sinceMs;
+    if (since === null) return null;
     const supabase = createClient();
     const now = Date.now();
-    const endMs = floorToMinute(now);
 
-    let sleepStart = mode.sinceMs;
+    let endMs = floorToMinute(now);
+    if (input.wakeClock) {
+      const picked = lastClockOccurrence(input.wakeClock, now, timeZone);
+      if (picked === null) return "Enter a valid time.";
+      endMs = picked;
+    }
+    if (gap && endMs <= since) return `Pick a wake-up time after ${formatClock(since, timeZone)}.`;
+
+    let sleepStart = since;
     if (input.sleepClock) {
-      const picked = lastClockOccurrence(input.sleepClock, now, timeZone);
+      const picked = lastClockOccurrence(input.sleepClock, endMs, timeZone);
       if (picked === null) return "Enter a valid time.";
       sleepStart = picked;
     }
@@ -375,7 +411,7 @@ export function CheckinController(props: Props) {
         category_id: sleepCat.id,
         start_at: new Date(sleepStart).toISOString(),
         end_at: new Date(endMs).toISOString(),
-        source: "sleep_button",
+        source: gap ? "backfill" : "sleep_button",
         answers: {},
       });
       if (error) {
@@ -389,7 +425,7 @@ export function CheckinController(props: Props) {
     const day = dayOf(now, timeZone, dayStartHour);
     const goal = day.dayType === "weekend" ? props.weekendGoalMin : props.weekdayGoalMin;
     const dayFields = {
-      wake_at: new Date(now).toISOString(),
+      wake_at: new Date(endMs).toISOString(),
       sleep_quality: input.quality,
       planned_study_min: input.planMin,
     };
@@ -405,10 +441,13 @@ export function CheckinController(props: Props) {
     if (logResult.error) console.error("Day log not saved:", logResult.error.message);
     router.refresh(); // the sleep entry and day log are saved even if the status update below fails
 
-    const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
-    if (err) return err;
+    if (!gap) {
+      const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
+      if (err) return err;
+    }
     if (endMs - sleepStart >= 60_000) setLastEndMs(endMs);
     setSlotStart(endMs);
+    setGapSince(null);
     setLastPrompt(null);
     missedInARow.current = 0;
     setWakeOpen(false);
@@ -464,6 +503,12 @@ export function CheckinController(props: Props) {
     return null;
   }
 
+  function skipMorning() {
+    setSlotStart(floorToMinute(Date.now()));
+    setGapSince(null);
+    setWakeOpen(false);
+  }
+
   function skip() {
     if (!prompt) return;
     recordCheckin(prompt.promptedAt, "skipped");
@@ -511,6 +556,19 @@ export function CheckinController(props: Props) {
           timeZone={timeZone}
           sleepSinceMs={mode.sinceMs}
           askSleepTime={mode.label === AUTO_QUIET}
+          dayStartHour={dayStartHour}
+          weekdayGoalMin={props.weekdayGoalMin}
+          weekendGoalMin={props.weekendGoalMin}
+          onSubmit={wake}
+        />
+      )}
+      {wakeOpen && mode.status === "normal" && gapSince !== null && (
+        <WakeModal
+          timeZone={timeZone}
+          sleepSinceMs={gapSince}
+          askSleepTime={false}
+          gapSinceMs={gapSince}
+          onSkip={skipMorning}
           dayStartHour={dayStartHour}
           weekdayGoalMin={props.weekdayGoalMin}
           weekendGoalMin={props.weekendGoalMin}

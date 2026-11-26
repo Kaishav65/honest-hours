@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Gauge, Hourglass, House, Smartphone } from "lucide-react";
+import { ArrowRight, CircleCheck, Flame, Gauge, Hourglass, House, Smartphone, Sprout, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type CSSProperties, type ReactNode } from "react";
 import { CategoryIcon } from "@/components/checkin/category-icon";
 import type { CategoryKind } from "@/lib/checkin/types";
 import { formatClock } from "@/lib/checkin/store";
+import { computeStreak, ON_TRACK_MIN_DAYS, onTrack, restOfDaySamples } from "@/lib/insights/streak";
+import { loadStudyHistory } from "@/lib/insights/study-history";
 import { computeToday, usualSleepMs, type InsightEntry } from "@/lib/insights/today";
 import { createClient } from "@/lib/supabase/server";
 import { dayOf, localParts } from "@/lib/time";
@@ -74,7 +76,7 @@ async function TodayData() {
   if (!cats) return null;
   const sleepIds = cats.filter((c) => c.kind === "sleep").map((c) => c.id);
 
-  const [rows, log, sleeps] = await Promise.all([
+  const [rows, log, sleeps, hist] = await Promise.all([
     supabase
       .from("entries")
       .select("id, category_id, start_at, end_at, source, planned")
@@ -89,15 +91,21 @@ async function TodayData() {
           .in("category_id", sleepIds)
           .gte("start_at", new Date(nowMs - 14 * 24 * 60 * MIN).toISOString())
       : Promise.resolve({ data: [] as { start_at: string }[] }),
+    loadStudyHistory(supabase, profile, nowMs),
   ]);
   if (!rows.data) return null;
+  const entryIds = rows.data.map((r) => r.id);
+  const tagRows = entryIds.length
+    ? ((await supabase.from("entry_tags").select("entry_id, tag_category_id").in("entry_id", entryIds)).data ?? [])
+    : [];
 
   const byId = new Map(cats.map((c) => [c.id, c]));
-  const entries: InsightEntry[] = rows.data.flatMap((r) => {
+  const entries: (InsightEntry & { id: string })[] = rows.data.flatMap((r) => {
     const c = byId.get(r.category_id);
     return c
       ? [
           {
+            id: r.id,
             categoryId: r.category_id,
             startMs: Date.parse(r.start_at),
             endMs: Date.parse(r.end_at),
@@ -113,14 +121,36 @@ async function TodayData() {
     log.data?.study_goal_min ?? (day.dayType === "weekend" ? profile.weekend_goal_min : profile.weekday_goal_min);
   const sleepAt = usualSleepMs((sleeps.data ?? []).map((s) => Date.parse(s.start_at)), day, tz, startHour);
   const s = computeToday({ entries, day, nowMs, goalMin, usualSleepMs: sleepAt });
+  const streak = computeStreak(hist.history);
+  const track = onTrack(s.studyMin, goalMin, restOfDaySamples(hist.history, day, nowMs, hist.study));
+
+  // "While doing" (e.g. YouTube during Dinner): the main entry owns the time, so tags are reported, never added.
+  const tagsByEntry = new Map<string, string[]>();
+  for (const t of tagRows) tagsByEntry.set(t.entry_id, [...(tagsByEntry.get(t.entry_id) ?? []), t.tag_category_id]);
+  const catName = (id: string) => byId.get(id)?.name ?? "Deleted category";
+  const whileDoing = new Map<string, { tag: string; main: string; min: number }>();
+  const until = Math.min(day.endMs, nowMs);
+  for (const e of entries) {
+    const min = Math.max(0, Math.min(e.endMs, until) - Math.max(e.startMs, day.startMs)) / MIN;
+    for (const tag of tagsByEntry.get(e.id) ?? []) {
+      const row = whileDoing.get(`${tag}|${e.categoryId}`) ?? { tag, main: e.categoryId, min: 0 };
+      row.min += min;
+      whileDoing.set(`${tag}|${e.categoryId}`, row);
+    }
+  }
+  const whileDoingText = [...whileDoing.values()]
+    .filter((w) => w.min >= 1)
+    .sort((a, b) => b.min - a.min)
+    .map((w) => `${catName(w.tag)} during ${catName(w.main)} · ${plain(w.min)}`)
+    .join(", ");
 
   const blocks = buildBlocks(
-    entries.map((e, i) => ({ id: String(i), categoryId: e.categoryId, startMs: e.startMs, endMs: e.endMs, source: "" })),
+    entries.map((e) => ({ id: e.id, categoryId: e.categoryId, startMs: e.startMs, endMs: e.endMs, source: "" })),
     day,
     nowMs,
   );
   const ribbonBlocks: RibbonBlock[] = blocks.map((b) => {
-    const cat = b.type === "entry" ? byId.get(entries[Number(b.entry.id)].categoryId) : undefined;
+    const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
     return {
       key: `${b.type}-${b.startMs}`,
       name: b.type === "gap" ? (b.open ? "Now (being tracked)" : "Unknown") : (cat?.name ?? "Deleted category"),
@@ -138,7 +168,8 @@ async function TodayData() {
     Date.parse(`${day.date}T00:00:00Z`),
   );
   const axis = Array.from({ length: 9 }, (_, i) => formatClock(day.startMs + i * 180 * MIN, tz));
-  const usualSleepOffset = Math.round((sleepAt - day.startMs) / MIN);
+  // A usual bedtime after the day's end (e.g. 3:25 AM) sits at the ribbon's right edge.
+  const usualSleepOffset = Math.round((Math.min(sleepAt, day.endMs) - day.startMs) / MIN);
   const maxCat = s.byCategory[0]?.min ?? 1;
 
   const freeParts: { kind: CategoryKind; label: string; min: number }[] = [
@@ -179,19 +210,44 @@ async function TodayData() {
           <span className="ring-label">{pct}%</span>
         </div>
         <div style={{ display: "grid", gap: ".35rem", minWidth: 0 }}>
-          <div className="overline">Study today</div>
+          <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+            <span className="overline">Study today</span>
+            <span
+              className="streak"
+              title={`${streak.streak}-day study streak${streak.freezes ? ` · ${streak.freezes} freeze${streak.freezes === 1 ? "" : "s"} saved` : ""}${streak.todayMet ? "" : " · today joins once the goal is met"}`}
+            >
+              <Flame className="lucide" aria-hidden />
+              {streak.streak}
+            </span>
+          </div>
           <div className="stat">
             <Dur min={s.studyMin} />
           </div>
           <div className="sm ink2">
             {s.goalRemainingMin > 0 ? `${plain(s.goalRemainingMin)} left of ${plain(goalMin)}` : `Goal of ${plain(goalMin)} reached`}
           </div>
-          {log.data?.planned_study_min != null && (
-            <span className="badge" style={{ justifySelf: "start" }}>
-              <Gauge className="lucide" aria-hidden />
-              Planned {plain(log.data.planned_study_min)}
-            </span>
-          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: ".35rem" }}>
+            {track?.state === "learning" && (
+              <span
+                className="badge"
+                title={`The on-track check needs ${ON_TRACK_MIN_DAYS} ${day.dayType} days of data: ${track.daysToGo} to go`}
+              >
+                <Sprout className="lucide" aria-hidden />
+                Learning your pace…
+              </span>
+            )}
+            {track && track.state !== "learning" && (
+              <span
+                className={`badge ${track.state === "on-track" ? "badge-success" : track.state === "close" ? "badge-warning" : "badge-danger"}`}
+                title="Study so far + your average study after this time on recent days of the same type"
+              >
+                {track.state === "on-track" ? <CircleCheck className="lucide" aria-hidden /> : track.state === "close" ? <Gauge className="lucide" aria-hidden /> : <TriangleAlert className="lucide" aria-hidden />}
+                {track.state === "on-track" ? "On track" : track.state === "close" ? "Close" : "At risk"} · {track.pct}% at
+                usual pace
+              </span>
+            )}
+            {log.data?.planned_study_min != null && <span className="badge">Planned {plain(log.data.planned_study_min)}</span>}
+          </div>
         </div>
       </article>
 
@@ -318,6 +374,51 @@ async function TodayData() {
             </div>
           )}
           {s.byCategory.length === 0 && s.unknownMin < 1 && <p className="sm muted">Nothing logged yet today.</p>}
+        </div>
+        {whileDoingText && (
+          <div className="xs muted while-doing">
+            <i className="dot" data-kind="entertainment" />
+            While doing: {whileDoingText} (not counted twice)
+          </div>
+        )}
+      </article>
+
+      <article className="card recent-card">
+        <div className="card-head">
+          <h2 className="card-title">Entries</h2>
+          <span className="spacer" />
+          <Link href="/timeline" className="btn btn-ghost btn-sm">
+            Timeline
+            <ArrowRight className="lucide" aria-hidden />
+          </Link>
+        </div>
+        <div className="scroll">
+          {[...blocks].reverse().map((b) => {
+            const cat = b.type === "entry" ? byId.get(b.entry.categoryId) : undefined;
+            const tags = b.type === "entry" ? (tagsByEntry.get(b.entry.id) ?? []) : [];
+            const open = b.type === "gap" && b.open;
+            return (
+              <div key={`${b.type}-${b.startMs}`} className="entry">
+                <i className="dot" data-kind={b.type === "gap" ? "unknown" : (cat?.kind ?? "unknown")} />
+                <span style={{ fontWeight: 500 }}>
+                  {b.type === "gap" ? (open ? "Now" : "Unknown") : (cat?.name ?? "Deleted category")}
+                  {tags.length > 0 && <span className="xs muted"> + {tags.map(catName).join(", ")}</span>}
+                </span>
+                <span className="d">
+                  {b.type === "gap" && !open ? (
+                    <Link href="/timeline" className="btn btn-soft btn-sm">
+                      Fill
+                    </Link>
+                  ) : (
+                    plain((b.endMs - b.startMs) / MIN)
+                  )}
+                </span>
+                <span className="t">
+                  {formatClock(b.startMs, tz)} – {open ? "now" : formatClock(b.endMs, tz)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </article>
     </section>

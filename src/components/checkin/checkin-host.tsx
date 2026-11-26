@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import { fieldsToAnswers } from "@/lib/checkin/answers";
 import { parseRoutineItems } from "@/lib/checkin/office";
+import { computeStreak } from "@/lib/insights/streak";
+import { loadStudyHistory } from "@/lib/insights/study-history";
 import type { Answers, Category, CategoryKind, EntryAnswerFields, Question, QuestionType, SystemKey } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/server";
 import type { BusyPreset } from "./busy-modal";
@@ -32,6 +34,10 @@ export async function CheckinHost() {
     supabase.from("routines").select("name, items").order("sort_order").limit(1),
   ]);
   if (!profile.data || !cats.data || !qs.data || !recent.data) return null;
+  // Rendered per request (after connection()), so reading the clock here is safe.
+  // eslint-disable-next-line react-hooks/purity
+  const { history } = await loadStudyHistory(supabase, profile.data, Date.now());
+  const { streak, freezes } = computeStreak(history);
   const routineRow = routines.data?.[0];
   const routine = routineRow ? { name: routineRow.name, items: parseRoutineItems(routineRow.items) } : null;
 
@@ -83,6 +89,7 @@ export async function CheckinHost() {
       lastEndMs={newest ? Date.parse(newest.end_at) : null}
       lastEntry={newest ? { categoryId: newest.category_id, answers: lastAnswers[newest.category_id] } : null}
       lastAnswers={lastAnswers}
+      streak={{ days: streak, freezes }}
     />
   );
 }

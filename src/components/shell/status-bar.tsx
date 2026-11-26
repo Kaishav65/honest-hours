@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Briefcase, Moon, Pause, Plus, Square, Sun, SunMoon } from "lucide-react";
+import { Bell, Briefcase, Flame, Moon, Pause, Plus, Snowflake, Square, Sun, SunMoon } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import {
   formatClock,
@@ -19,7 +19,7 @@ function toggleTheme() {
 
 // Live state and next check-in come from the check-in controller (see lib/checkin/store.ts).
 export function StatusBar() {
-  const { nextDueMs, timeZone, mode, routineName } = useSyncExternalStore(
+  const { nextDueMs, timeZone, mode, routineName, streak } = useSyncExternalStore(
     subscribeCheckin,
     getCheckinStatus,
     getServerCheckinStatus,
@@ -52,6 +52,19 @@ export function StatusBar() {
         Next check-in <b>{nextDueMs ? formatClock(nextDueMs, timeZone) : "—"}</b>
       </span>
       <span className="spacer" />
+      {streak && (
+        <span className="streak" title={`${streak.days}-day study streak`}>
+          <Flame className="lucide" aria-hidden />
+          {streak.days}
+        </span>
+      )}
+      {streak && streak.freezes > 0 && (
+        <span className="badge badge-info" title="Streak freezes saved: one covers a missed day automatically">
+          <Snowflake className="lucide" aria-hidden />
+          {streak.freezes} freeze{streak.freezes === 1 ? "" : "s"}
+        </span>
+      )}
+      {streak && <div className="vsep" />}
       {status === "normal" && (
         <>
           <button className="btn btn-primary btn-sm" onClick={() => sendCommand("log-now")} title="Log what you did so far (L)">

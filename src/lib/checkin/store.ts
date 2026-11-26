@@ -14,10 +14,12 @@ export type CheckinStatus = {
   mode: Mode;
   /** Name of the one-tap routine ("Office day"), or null when the user has none. */
   routineName: string | null;
+  /** Study streak (days) and saved freezes, or null before the controller has loaded. */
+  streak: { days: number; freezes: number } | null;
 };
 
 const NORMAL: Mode = { status: "normal", label: null, sinceMs: null, untilMs: null };
-let state: CheckinStatus = { nextDueMs: null, timeZone: "Asia/Kolkata", mode: NORMAL, routineName: null };
+let state: CheckinStatus = { nextDueMs: null, timeZone: "Asia/Kolkata", mode: NORMAL, routineName: null, streak: null };
 const listeners = new Set<() => void>();
 
 export const subscribeCheckin = (fn: () => void) => {
@@ -34,6 +36,8 @@ export function setCheckinStatus(next: CheckinStatus) {
     next.nextDueMs === state.nextDueMs &&
     next.timeZone === state.timeZone &&
     next.routineName === state.routineName &&
+    next.streak?.days === state.streak?.days &&
+    next.streak?.freezes === state.streak?.freezes &&
     next.mode.status === state.mode.status &&
     next.mode.label === state.mode.label &&
     next.mode.sinceMs === state.mode.sinceMs &&

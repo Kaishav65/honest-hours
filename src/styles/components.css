@@ -332,7 +332,7 @@ dialog.modal:focus-visible { outline: none; }
 }
 
 
-/* ---------- Today (ported from design-system/preview.html; coach + recent cards arrive in v2) ---------- */
+/* ---------- Today (ported from design-system/preview.html; the coach card arrives with the v2 coach) ---------- */
 .today { display: grid; gap: var(--gutter); grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: auto auto auto minmax(0, 1fr); }
 .today-head { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: var(--space-6); }
 .greet { font-size: var(--text-2xl); font-weight: 500; line-height: var(--leading-tight); }
@@ -347,6 +347,19 @@ dialog.modal:focus-visible { outline: none; }
 .where-row { display: grid; grid-template-columns: 1.1rem 7.5rem 1fr 4.2rem; align-items: center; gap: .6rem; font-size: var(--text-sm); padding: .32rem 0; }
 .where-row .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 .where-row .bar { height: .45rem; }
+.while-doing { margin-top: .5rem; display: flex; gap: .4rem; align-items: center; }
+.tile .streak { height: 1.4rem; padding: 0 .5rem; font-size: var(--text-xs); }
+.tile .streak .lucide { width: .85rem; height: .85rem; }
+.recent-card { display: none; }
+.entry { display: grid; grid-template-columns: auto 1fr auto; gap: .15rem .6rem; align-items: center; padding: .5rem .25rem; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.entry:last-child { border-bottom: 0; }
+.entry .t { grid-column: 2; font-size: var(--text-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.entry .d { grid-row: span 2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.entry .dot { grid-row: span 2; }
+@container main (min-width: 86rem) {
+  .where-card { grid-column: span 9; }
+  .recent-card { display: flex; grid-column: span 3; }
+}
 @container main (max-width: 70rem) {
   .tile-goal .ring { --size: 4.25rem; }
 }

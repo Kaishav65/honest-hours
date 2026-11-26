@@ -40,6 +40,27 @@ describe("computeToday", () => {
     expect(s.wastedMin).toBe(40);
     expect(s.wastedSessions).toBe(1);
   });
+  it("counts back-to-back slots of the same app as one session", () => {
+    const w = (c: string, a: string, b: string, planned: boolean | null = null) =>
+      e(c, "entertainment", a, b, { value: "waste", planned });
+    const r = computeToday({
+      entries: [
+        w("insta", "12:00", "12:30"),
+        w("insta", "12:30", "13:00"),
+        w("insta", "13:00", "13:30"), // one 90-min session
+        w("tiktok", "13:30", "13:40"), // different app: new session
+        w("insta", "14:00", "14:10"), // gap before it: new session
+        w("insta", "14:10", "14:20", true), // planned: not wasted
+        w("insta", "14:20", "14:30"), // after a planned part: new session
+      ],
+      day,
+      nowMs: now,
+      goalMin: 0,
+      usualSleepMs: at("24:00"),
+    });
+    expect(r.wastedMin).toBe(90 + 10 + 10 + 10);
+    expect(r.wastedSessions).toBe(4);
+  });
   it("tracking % and unknown", () => {
     expect(s.passedMin).toBe(1020);
     expect(s.loggedMin).toBe(180 + 120 + 480 + 60); // 840
@@ -90,5 +111,15 @@ describe("usualSleepMs", () => {
     ];
     // offsets: 20.5h, 21.5h, 20h → median 20.5h = 23:30
     expect(usualSleepMs(starts, day, TZ, 3)).toBe(at("23:30"));
+  });
+  it("counts bedtimes after the 3 AM day start as the night before", () => {
+    const starts = [
+      dayOffset("2026-11-20", "03:25"), // 24h 25m into 19 Nov
+      dayOffset("2026-11-21", "03:40"),
+      dayOffset("2026-11-22", "02:50"),
+      dayOffset("2026-11-21", "09:30"), // morning nap: ignored
+      dayOffset("2026-11-22", "03:00"), // starts exactly at the day start: a check-in slot after a gap, ignored
+    ];
+    expect(usualSleepMs(starts, day, TZ, 3)).toBe(at("03:25", "2026-11-24"));
   });
 });

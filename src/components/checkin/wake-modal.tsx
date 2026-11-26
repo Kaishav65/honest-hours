@@ -6,13 +6,25 @@ import { clockOf } from "@/lib/checkin/status";
 import { formatClock } from "@/lib/checkin/store";
 import { dayOf } from "@/lib/time";
 
-export type WakeInput = { quality: number | null; planMin: number | null; sleepClock: string | null };
+export type WakeInput = {
+  quality: number | null;
+  planMin: number | null;
+  sleepClock: string | null;
+  /** Only after a gap (see `gapSinceMs`): when you woke. Otherwise you woke now. */
+  wakeClock: string | null;
+};
 
 type Props = {
   timeZone: string;
   sleepSinceMs: number;
   /** True when the app went quiet by itself: we don't know when sleep started, so ask. */
   askSleepTime: boolean;
+  /**
+   * Set when the app opens on a new day with nothing logged since this time (no "Going to sleep" tap):
+   * asks when you slept and woke, and offers Skip (start tracking from now).
+   */
+  gapSinceMs?: number;
+  onSkip?: () => void;
   dayStartHour: number;
   weekdayGoalMin: number;
   weekendGoalMin: number;
@@ -23,7 +35,17 @@ const PLAN_OPTIONS = [0, 60, 120, 180, 240, 300];
 const planLabel = (m: number) => (m === 0 ? "None" : m % 60 ? `${m} min` : `${m / 60}h`);
 
 // "I'm awake": sleep quality + today's study plan (and, after an automatic quiet night, when you slept).
-export function WakeModal({ timeZone, sleepSinceMs, askSleepTime, dayStartHour, weekdayGoalMin, weekendGoalMin, onSubmit }: Props) {
+export function WakeModal({
+  timeZone,
+  sleepSinceMs,
+  askSleepTime,
+  gapSinceMs,
+  onSkip,
+  dayStartHour,
+  weekdayGoalMin,
+  weekendGoalMin,
+  onSubmit,
+}: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [quality, setQuality] = useState<number | null>(null);
   // Prefill the plan with today's goal (weekday or weekend).
@@ -31,7 +53,12 @@ export function WakeModal({ timeZone, sleepSinceMs, askSleepTime, dayStartHour, 
     dayOf(Date.now(), timeZone, dayStartHour).dayType === "weekend" ? weekendGoalMin : weekdayGoalMin,
   );
   const [plan, setPlan] = useState<number | null>(goalMin);
-  const [sleepClock, setSleepClock] = useState(() => clockOf(sleepSinceMs, timeZone));
+  const gap = gapSinceMs !== undefined;
+  // After a long gap the last entry's time is a poor guess for bedtime: suggest 11 PM instead.
+  const [sleepClock, setSleepClock] = useState(() =>
+    gap && Date.now() - sleepSinceMs > 12 * 60 * 60_000 ? "23:00" : clockOf(sleepSinceMs, timeZone),
+  );
+  const [wakeClock, setWakeClock] = useState(() => clockOf(Date.now(), timeZone));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +72,12 @@ export function WakeModal({ timeZone, sleepSinceMs, askSleepTime, dayStartHour, 
   async function submit() {
     setBusy(true);
     setError(null);
-    const err = await onSubmit({ quality, planMin: plan, sleepClock: askSleepTime ? sleepClock : null });
+    const err = await onSubmit({
+      quality,
+      planMin: plan,
+      sleepClock: askSleepTime || gap ? sleepClock : null,
+      wakeClock: gap ? wakeClock : null,
+    });
     if (err) {
       setError(err);
       setBusy(false);
@@ -66,7 +98,36 @@ export function WakeModal({ timeZone, sleepSinceMs, askSleepTime, dayStartHour, 
         </h2>
       </div>
       <div className="modal-body">
-        {askSleepTime ? (
+        {gap ? (
+          <>
+            <p className="sm muted">Nothing is logged since {formatClock(gapSinceMs, timeZone)}. When did you sleep?</p>
+            <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
+              <div className="field">
+                <label htmlFor="slept-at">Fell asleep</label>
+                <input
+                  id="slept-at"
+                  type="time"
+                  className="input"
+                  style={{ width: "9rem" }}
+                  value={sleepClock}
+                  onChange={(e) => setSleepClock(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="woke-at">Woke up</label>
+                <input
+                  id="woke-at"
+                  type="time"
+                  className="input"
+                  style={{ width: "9rem" }}
+                  value={wakeClock}
+                  onChange={(e) => setWakeClock(e.target.value)}
+                />
+              </div>
+            </div>
+            <span className="xs muted">Time before you fell asleep stays Unknown; fill it from the Timeline.</span>
+          </>
+        ) : askSleepTime ? (
           <div className="field">
             <label htmlFor="slept-at">When did you sleep?</label>
             <input
@@ -110,8 +171,17 @@ export function WakeModal({ timeZone, sleepSinceMs, askSleepTime, dayStartHour, 
         )}
       </div>
       <div className="modal-foot">
+        {gap && onSkip && (
+          <button className="btn btn-ghost" onClick={onSkip} disabled={busy} title="Start tracking from now; the gap stays Unknown">
+            Skip
+          </button>
+        )}
         <span style={{ flex: 1 }} />
-        <button className="btn btn-primary" onClick={submit} disabled={busy || (askSleepTime && !sleepClock)}>
+        <button
+          className="btn btn-primary"
+          onClick={submit}
+          disabled={busy || ((askSleepTime || gap) && !sleepClock) || (gap && !wakeClock)}
+        >
           <Sun className="lucide" aria-hidden /> {busy ? "Saving…" : "I'm awake"}
         </button>
       </div>
