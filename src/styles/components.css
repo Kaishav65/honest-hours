@@ -292,7 +292,7 @@ dialog.modal:focus-visible { outline: none; }
 .app {
   height: 100dvh; min-width: 1280px; min-height: 660px; overflow: hidden;
   display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w) 1fr; /* plain 1fr (not minmax) so the column change can animate */
   grid-template-rows: var(--statusbar-h) minmax(0, 1fr);
   grid-template-areas: "brand status" "nav main";
 }
@@ -333,28 +333,32 @@ dialog.modal:focus-visible { outline: none; }
 .page { height: 100%; padding: var(--gutter); max-width: var(--content-max); margin: 0 auto; }
 .page[hidden] { display: none; }
 
-/* Collapsed sidebar (user toggle, remembered in localStorage): same icons-only rail as below 1440px */
-.app { transition: grid-template-columns var(--dur) var(--ease-out); }
-[data-sidebar="collapsed"] .app { --sidebar-w: var(--sidebar-rail-w); }
-[data-sidebar="collapsed"] .brand { justify-content: center; padding: 0; }
-[data-sidebar="collapsed"] :is(.brand-name, .nav-item .label, .nav-item .kbd, .nav-group, .sidebar .note, .user .who) { display: none; }
-[data-sidebar="collapsed"] .nav-item { justify-content: center; padding: 0; }
-[data-sidebar="collapsed"] .user { justify-content: center; padding: .4rem 0; }
-[data-sidebar="collapsed"] .user { flex-direction: column; gap: .35rem; }
-[data-sidebar="collapsed"] .user form { margin: 0 !important; }
-[data-sidebar="collapsed"] .sidebar-toggle .lucide { transform: scaleX(-1); }
+/* Sidebar rail. --r is 0 (expanded) or 1 (collapsed: the user's toggle, or any window under 1440px).
+   Everything below is computed from --r, so the grid width and each piece (labels, gaps, avatar, log-out) glide together. */
+.app { --rail-dur: 400ms; --rail-ease: cubic-bezier(.65, 0, .35, 1); --r: 0; transition: grid-template-columns var(--rail-dur) var(--rail-ease); }
+[data-sidebar="collapsed"] .app { --sidebar-w: var(--sidebar-rail-w); --r: 1; }
+.brand, .nav-item, .user { transition: gap var(--rail-dur) var(--rail-ease), padding var(--rail-dur) var(--rail-ease); }
+.brand { gap: calc((1 - var(--r)) * .6rem); }
+.brand-name, .nav-item .label, .user .who {
+  overflow: hidden; white-space: nowrap; opacity: calc(1 - var(--r));
+  transition: max-width var(--rail-dur) var(--rail-ease), opacity var(--rail-dur) var(--rail-ease), margin var(--rail-dur) var(--rail-ease);
+}
+.brand-name { max-width: calc((1 - var(--r)) * 12rem); }
+.nav-item { gap: calc((1 - var(--r)) * .75rem); padding-left: calc(.8rem - var(--r) * .06rem); }
+.nav-item .label { max-width: calc((1 - var(--r)) * 12rem); }
 .sidebar-toggle { margin-bottom: calc(var(--space-4) * -.5); }
+.sidebar-toggle .lucide { transform: scaleX(calc(1 - 2 * var(--r))); transition: transform var(--rail-dur) var(--rail-ease); }
+.user { position: relative; height: calc(2.8rem + var(--r) * 2.6rem); align-items: flex-start; gap: calc((1 - var(--r)) * .6rem); transition: gap var(--rail-dur) var(--rail-ease), height var(--rail-dur) var(--rail-ease); }
+.user .avatar { margin-left: calc(var(--r) * (50% - 1rem)); transition: margin var(--rail-dur) var(--rail-ease); }
+.user .who { flex: 1; min-width: 0; max-width: calc((1 - var(--r)) * 10rem); margin-right: calc((1 - var(--r)) * 2.5rem); }
+.user form { position: absolute; margin: 0 !important; left: calc(100% - 2.5rem + var(--r) * (1.5rem - 50%)); top: calc(.4rem + var(--r) * 2.6rem); transition: left var(--rail-dur) var(--rail-ease), top var(--rail-dur) var(--rail-ease); }
+[data-sidebar="collapsed"] :is(.nav-item .kbd, .nav-group, .sidebar .note) { display: none; }
 
-/* Rail sidebar under 1440px: icons only */
+/* Under 1440px the sidebar is always the rail */
 @media (max-width: 1439.98px) {
-  .app { --sidebar-w: var(--sidebar-rail-w); }
-  .brand { justify-content: center; padding: 0; }
-  .brand-name, .nav-item .label, .nav-item .kbd, .nav-group, .sidebar .note, .user .who { display: none; }
-  .nav-item { justify-content: center; padding: 0; }
-  .user { justify-content: center; padding: .4rem 0; }
-  .user { flex-direction: column; gap: .35rem; }
-  .user form { margin: 0 !important; }
-  .sidebar-toggle { display: none; } /* already a rail at this width */
+  .app { --sidebar-w: var(--sidebar-rail-w); --r: 1; }
+  .nav-item .kbd, .nav-group, .sidebar .note { display: none; }
+  .sidebar-toggle { display: none; }
 }
 
 
