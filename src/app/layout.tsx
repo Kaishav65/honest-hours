@@ -32,7 +32,7 @@ export const viewport: Viewport = {
 
 // Sets data-theme before first paint so there's no light/dark flash.
 // "hh-theme" = "light" | "dark" | "system" (follow the computer) | missing (light by default).
-const themeScript = `(function(){try{var t=localStorage.getItem("hh-theme");if(t==="system"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}else if(t!=="dark"){t="light"}document.documentElement.dataset.theme=t}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("hh-theme");if(t==="system"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}else if(t!=="dark"){t="light"}document.documentElement.dataset.theme=t;if(localStorage.getItem("hh-sidebar")==="collapsed")document.documentElement.dataset.sidebar="collapsed"}catch(e){}})();`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

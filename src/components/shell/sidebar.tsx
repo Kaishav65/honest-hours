@@ -2,12 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { PanelLeftClose } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { NAV_ITEMS } from "./nav-items";
 
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+function toggleSidebar() {
+  const root = document.documentElement;
+  const collapsed = root.dataset.sidebar !== "collapsed";
+  if (collapsed) root.dataset.sidebar = "collapsed";
+  else delete root.dataset.sidebar;
+  localStorage.setItem("hh-sidebar", collapsed ? "collapsed" : "expanded");
 }
 
 export function Sidebar({ footer }: { footer: ReactNode }) {
@@ -42,6 +51,10 @@ export function Sidebar({ footer }: { footer: ReactNode }) {
         </Link>
       ))}
       <div className="sidebar-foot">
+        <button type="button" className="nav-item sidebar-toggle" onClick={toggleSidebar} title="Collapse / expand the sidebar" aria-label="Collapse / expand the sidebar">
+          <PanelLeftClose className="lucide" aria-hidden />
+          <span className="label">Collapse</span>
+        </button>
         {footer}
       </div>
     </nav>

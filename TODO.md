@@ -343,3 +343,10 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Decisions:** chose the pips card over a status-bar button (suggested to and approved by the user): it's where the pomodoro count is decided. Status bar still shows Focus / Stop early only during a pomodoro.
 - **Verified:** tsc clean; Playwright (real account, read-only): header has no link, card has one "Start" link, it opens /focus; screenshot looks right.
 - **Not verified:** narrow widths (the app's min width is 1280px, only 1440 checked).
+
+### Polish: collapsible sidebar (2026-11-27)
+- **Done:** "Collapse" button at the bottom of the sidebar shrinks it to the icons-only rail (and back); choice is remembered in localStorage (`hh-sidebar`) and applied before first paint (extra line in the theme script in `layout.tsx`), width change animates. Files: `sidebar.tsx`, `layout.tsx`, `components.css`.
+- **Decisions:** reused the existing rail look (already used under 1440px) instead of a new design; state lives on `<html data-sidebar>` like the theme, so no React state/flash. The button is hidden under 1440px, where the sidebar is always a rail.
+- **Verified:** Playwright at 1600px (real account, read-only): 225px → 66px → stays after reload → back to 225px; screenshots look right.
+- **Not verified:** under 1440px you can't expand the rail (no button there); dark theme.
+- **Fix (same day): log-out button misaligned in the collapsed sidebar.** Cause: avatar and log-out sat side by side in a 66px rail, so the pair overflowed off-centre. Now they stack (avatar above log-out), for the collapsed state and for the under-1440px rail (`components.css`). Verified with Playwright: toggle, avatar and log-out all centred (x=32 of 66px at 1600px, collapsed); the under-1440px rail uses the same rule but I only measured avatar/log-out there (both centred, x=30 of 62px).

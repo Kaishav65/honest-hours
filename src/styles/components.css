@@ -333,6 +333,18 @@ dialog.modal:focus-visible { outline: none; }
 .page { height: 100%; padding: var(--gutter); max-width: var(--content-max); margin: 0 auto; }
 .page[hidden] { display: none; }
 
+/* Collapsed sidebar (user toggle, remembered in localStorage): same icons-only rail as below 1440px */
+.app { transition: grid-template-columns var(--dur) var(--ease-out); }
+[data-sidebar="collapsed"] .app { --sidebar-w: var(--sidebar-rail-w); }
+[data-sidebar="collapsed"] .brand { justify-content: center; padding: 0; }
+[data-sidebar="collapsed"] :is(.brand-name, .nav-item .label, .nav-item .kbd, .nav-group, .sidebar .note, .user .who) { display: none; }
+[data-sidebar="collapsed"] .nav-item { justify-content: center; padding: 0; }
+[data-sidebar="collapsed"] .user { justify-content: center; padding: .4rem 0; }
+[data-sidebar="collapsed"] .user { flex-direction: column; gap: .35rem; }
+[data-sidebar="collapsed"] .user form { margin: 0 !important; }
+[data-sidebar="collapsed"] .sidebar-toggle .lucide { transform: scaleX(-1); }
+.sidebar-toggle { margin-bottom: calc(var(--space-4) * -.5); }
+
 /* Rail sidebar under 1440px: icons only */
 @media (max-width: 1439.98px) {
   .app { --sidebar-w: var(--sidebar-rail-w); }
@@ -340,6 +352,9 @@ dialog.modal:focus-visible { outline: none; }
   .brand-name, .nav-item .label, .nav-item .kbd, .nav-group, .sidebar .note, .user .who { display: none; }
   .nav-item { justify-content: center; padding: 0; }
   .user { justify-content: center; padding: .4rem 0; }
+  .user { flex-direction: column; gap: .35rem; }
+  .user form { margin: 0 !important; }
+  .sidebar-toggle { display: none; } /* already a rail at this width */
 }
 
 
