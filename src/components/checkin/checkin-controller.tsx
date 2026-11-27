@@ -37,6 +37,7 @@ import { createClient } from "@/lib/supabase/client";
 import { dayOf, localParts, splitSlot } from "@/lib/time";
 import { BusyModal, type BusyChoice, type BusyPreset } from "./busy-modal";
 import { CheckinModal, type SavePart } from "./checkin-modal";
+import { ConfirmModal } from "./confirm-modal";
 import { NoticeModal } from "./notice-modal";
 import { CoachToast, type ToastMessage } from "@/components/coach/coach-toast";
 import { loadCoachFacts } from "@/lib/coach/facts";
@@ -147,6 +148,9 @@ export function CheckinController(props: Props) {
   const [, bump] = useState(0);
 
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
+  // One-tap actions (sleep, routine, end busy, stop early) ask first.
+  const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel: string; onConfirm: () => void } | null>(null);
+  const askConfirm = (c: NonNullable<typeof confirm>) => setConfirm(c);
   const officeCat = categories.find((c) => c.kind === "work");
 
   // A skipped popup waits one more interval; the slot itself keeps growing. Office hours use a longer interval.
@@ -471,7 +475,13 @@ export function CheckinController(props: Props) {
   useEffect(() => {
     return onPomodoro((c) => {
       if (c.type === "start") void startPomodoro(c.request);
-      else void stopPomodoro();
+      else if (pomodoroRunning && !pomoEnd)
+        askConfirm({
+          title: "Stop early?",
+          message: "The session ends now. Anything under a minute isn't logged.",
+          confirmLabel: "Stop session",
+          onConfirm: () => void stopPomodoro(),
+        });
     });
   });
 
@@ -757,15 +767,33 @@ export function CheckinController(props: Props) {
     const run = (command: string) => {
       if (command === "log-now" && !prompt && mode.status === "normal") openPrompt();
       if (command === "busy" && !prompt && mode.status === "normal") setBusyOpen(true);
-      if (command === "end-busy" && mode.status === "busy") endBusy();
-      if (command === "sleep" && !prompt && mode.status === "normal") {
-        // The review is offered once a day; skipping it never blocks sleep.
-        const day = dayOf(Date.now(), timeZone, dayStartHour);
-        if (props.reviewDone || reviewSaved || wasOffered(day.date)) sleepNow();
-        else void openReview(true);
-      }
+      if (command === "end-busy" && mode.status === "busy")
+        askConfirm({
+          title: "End busy?",
+          message: "Popups come back and you'll log the busy time now.",
+          confirmLabel: "End busy",
+          onConfirm: () => void endBusy(),
+        });
+      if (command === "sleep" && !prompt && mode.status === "normal")
+        askConfirm({
+          title: "Going to sleep?",
+          message: "Popups stop until you tap I'm awake.",
+          confirmLabel: "Going to sleep",
+          onConfirm: () => {
+            // The review is offered once a day; skipping it never blocks sleep.
+            const day = dayOf(Date.now(), timeZone, dayStartHour);
+            if (props.reviewDone || reviewSaved || wasOffered(day.date)) sleepNow();
+            else void openReview(true);
+          },
+        });
       if (command === "awake" && mode.status === "sleeping") setWakeOpen(true);
-      if (command === "routine" && !prompt && mode.status === "normal") runRoutine();
+      if (command === "routine" && !prompt && mode.status === "normal" && props.routine)
+        askConfirm({
+          title: `Log ${props.routine.name}?`,
+          message: "Adds today's routine entries up to now. Time you already logged is left alone.",
+          confirmLabel: "Log it",
+          onConfirm: () => void runRoutine(),
+        });
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "l" || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
@@ -974,6 +1002,18 @@ export function CheckinController(props: Props) {
         />
       )}
       <CoachToast message={toast} onClose={() => setToast(null)} />
+      {confirm && (
+        <ConfirmModal
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            setConfirm(null);
+            confirm.onConfirm();
+          }}
+        />
+      )}
       {notice && <NoticeModal title={notice.title} message={notice.message} onClose={() => setNotice(null)} />}
       {prompt && !prompt.office && (
         <CheckinModal

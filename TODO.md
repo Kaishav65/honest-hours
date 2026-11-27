@@ -2,7 +2,7 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-27 (polish: page-load indicator — see "Polish: page-load indicator")
+> Last updated: 2026-11-27 (polish: confirm one-tap actions — see "Polish: confirm one-tap actions")
 
 **Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded, smoke-tested in a real browser (Chrome via Playwright) and in daily use since 2026-11-21. Step 11: PWA + Vercel deploy done (deploy reported by the user, not checked in this session); installing the PWA from the live URL still to confirm. v2 started: Steps 12–20 done (Step 20 = Settings extras). **Next: v2 Step 21 — Look: Clean / Notebook** (the last v2 step) (v2 is broken into Steps 12–21 under "Later").
 
@@ -365,3 +365,9 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Decisions:** options were (a) one loader (b) per-page skeletons. Chose (a) as asked; skeletons would add a file per page. Just adding `loading.tsx` was not enough: each page already wrapped its data in an empty `<Suspense>`, which caught the loading state first, so the fallback had to be set there. Named the CSS class `.spin` because `.ring` is already the progress-ring class.
 - **Verified:** tsc clean; Playwright (real account, read-only) with throttled network: clicking Insights shows the loader (screenshot: sprout centred, ring arc visible) and it disappears once the page arrives.
 - **Not verified:** how long the loader is visible on real (unthrottled) navigations; dark theme; reduced-motion; the other five pages (same one-line change, only Insights was exercised).
+
+### Polish: confirm one-tap actions (2026-11-27)
+- **Done:** a stray click on Going to sleep, Office day, End busy or Stop early used to act at once. Each now opens a confirm dialog (Cancel has focus, so Enter never confirms). New `components/checkin/confirm-modal.tsx` (`ConfirmModal`); `checkin-controller.tsx` has a `confirm` state + `askConfirm`, used in the status-bar command handler (sleep, routine, end-busy) and the pomodoro stop handler (status bar and Focus page both go through it).
+- **Decisions:** options were (a) confirm dialog (b) undo toast. Chose (a) as asked: no extra delete logic. Stop early is confirmed in every case, not only under 1 minute, because its save modal has no Cancel, so stopping was final either way. The Office day message is generic ("adds today's routine entries up to now"), not an exact count, to avoid reading the database twice. Not confirmed: the L key and the auto-quiet sleep after missed check-ins (not one-tap buttons), natural pomodoro completion.
+- **Verified:** tsc and eslint clean on `src/components/checkin`.
+- **Not verified:** in a browser (dialogs open, Cancel/Esc do nothing, confirm runs the action); the confirm callback uses the state from the moment of the click (fine unless the state changes while the dialog is open).
