@@ -166,12 +166,13 @@ Each one maps to a shadcn/ui component (or a small custom one) styled with the t
 
 ---
 
-## 7. Responsive desktop
+## 7. Responsive desktop & tablet
 
-Desktop only. The root font size is fluid: `clamp(14px, 0.3125vw + 10.5px, 17px)`. Every rem-based size (text, spacing, radius) scales with the window, so one layout works everywhere.
+Desktop and tablet (720px and up). The root font size is fluid: `clamp(14px, 0.3125vw + 10.5px, 17px)`. Every rem-based size (text, spacing, radius) scales with the window, so one layout works everywhere.
 
 | Window width | Root | Sidebar | Today layout |
 |---|---|---|---|
+| 720–1279 (tablets) | 14px | Icon rail | Tiles 2×2, page scrolls inside `main`; status-bar secondary buttons icon-only (words also hidden under 860) |
 | 1280–1439 (min target 1366×768) | 14–15px | **Icon rail** 68px (tooltips, labels hidden) | 4 tiles · ribbon · Coach + Where |
 | 1440–1599 | 15px | Full 232px | Same, more air |
 | 1600–2559 | 15.5–16.5px | Full | **+ Entries panel** (container query ≥ 86rem) |
@@ -180,7 +181,8 @@ Desktop only. The root font size is fluid: `clamp(14px, 0.3125vw + 10.5px, 17px)
 
 - Use **container queries** on `main` for page layouts, not viewport media queries, so the sidebar width is taken into account.
 - Rows use `minmax(0, 1fr)` so the last row takes the leftover height and scrolls inside.
-- Below 1280px wide the shell stops shrinking. The app is laptop-only, so that's acceptable.
+- When `main` is narrow (Today < 72rem; Goals/Insights tiles < 64rem; Focus < 56rem) pages reflow and scroll inside `main` instead of squeezing cards; wider windows keep the one-window layout.
+- Below 720px wide the shell stops shrinking (phones are not a target).
 
 ---
 

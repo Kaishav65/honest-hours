@@ -60,7 +60,7 @@ async function GoalsData() {
         </button>
       </div>
       <div className="scroll" style={{ flex: 1, display: "grid", gap: "var(--gutter)", alignContent: "start", paddingBottom: "var(--space-4)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "var(--gutter)" }}>
+        <div className="goal-tiles">
           <article className="card tile" style={{ gridColumn: "auto" }}>
             <div className="top">
               <Flame className="lucide" aria-hidden />

@@ -2,7 +2,7 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-27 (polish: confirm one-tap actions — see "Polish: confirm one-tap actions")
+> Last updated: 2026-11-27 (polish: tablet-responsive layout — see "Polish: tablet-responsive layout")
 
 **Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded, smoke-tested in a real browser (Chrome via Playwright) and in daily use since 2026-11-21. Step 11: PWA + Vercel deploy done (deploy reported by the user, not checked in this session); installing the PWA from the live URL still to confirm. v2 started: Steps 12–20 done (Step 20 = Settings extras). **Next: v2 Step 21 — Look: Clean / Notebook** (the last v2 step) (v2 is broken into Steps 12–21 under "Later").
 
@@ -371,3 +371,13 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Decisions:** options were (a) confirm dialog (b) undo toast. Chose (a) as asked: no extra delete logic. Stop early is confirmed in every case, not only under 1 minute, because its save modal has no Cancel, so stopping was final either way. The Office day message is generic ("adds today's routine entries up to now"), not an exact count, to avoid reading the database twice. Not confirmed: the L key and the auto-quiet sleep after missed check-ins (not one-tap buttons), natural pomodoro completion.
 - **Verified:** tsc and eslint clean on `src/components/checkin`.
 - **Not verified:** in a browser (dialogs open, Cancel/Esc do nothing, confirm runs the action); the confirm callback uses the state from the moment of the click (fine unless the state changes while the dialog is open).
+
+### Polish: tablet-responsive layout (2026-11-27)
+- **Done:** the app now works on tablets (portrait and landscape) instead of being forced to 1280px wide with a horizontal scroll.
+  - Shell: `.app` min-width 1280px → 720px (`components.css`). Sidebar stays the icon rail (already the rule under 1440px).
+  - Status bar: under 1280px, Busy / routine (e.g. Office day) / Going to sleep become icon-only buttons and the `L` key hint hides; under 860px the "Next check-in" and "· in 1h" words hide (bell + time stay). The hidden button words stay in the DOM for screen readers (`.sb-label`, visually hidden) and the buttons keep their `title` tooltip (`status-bar.tsx`: words wrapped in `sb-label` / `sb-text` spans).
+  - Pages (container queries on `main`): **Today** under 72rem: the 4 tiles become 2×2, the page scrolls inside `main`, Coach card capped at 30rem (scrolls inside). Under 64rem: card heads wrap, **Goals** tiles 4 → 2×2 (new `.goal-tiles` class replaces the inline grid in `goals/page.tsx`), **Insights** week tiles 3 → 2 + 1 full-width, chart below. **Focus** under 56rem: timer card on top, sessions below.
+  - `design-system/DESIGN_SYSTEM.md` §7 updated with the tablet rows.
+- **Decisions:** options were (a) keep "one window, never scrolls" everywhere and squeeze cards (b) let a page scroll inside `main` when `main` is narrow. Chose (b): at 1024×768 the 2×2 tiles + ribbon leave no room for Coach, and tiny scroll boxes are worse on touch. Desktop (≥1280 wide, main ≥ 72rem) keeps the one-window layout unchanged. Breakpoints use container queries on `main` (design system rule), the status bar uses viewport media queries because it is outside `main`. Kept the sidebar as the rail rather than a bottom tab bar or a drawer: it fits at 720px and needs no new component. Insights' 3rd tile needs `!important` because the tiles have an inline `grid-column: auto`.
+- **Verified:** Playwright (real account, read-only) on all 6 pages + Insights report + login at 768×1024, 820×1180, 1024×768, 1180×820, 1024×1366, 1366×768, 1920×1080: no element sticks out past the window at any size (before: every page was 1280px wide). Screenshots checked for Today (768, 1024, 1180, 1366), Focus, Goals, Insights, report card, Timeline, Settings (all 6 tabs: no overflow), check-in popup at 768 (opened only, closed without saving). 1366×768 looks the same as before (full status-bar labels, Entries panel). eslint + tsc clean, 143 tests pass.
+- **Not verified:** a real tablet / touch: hover-only things (ribbon block hover cards, sidebar rail tooltips, status-bar button tooltips) have no tap equivalent; dark theme at tablet sizes; status bar in busy / pomodoro / sleeping states at narrow widths (only "Tracking" seen); phones (under 720px still scroll sideways, by design).

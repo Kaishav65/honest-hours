@@ -290,7 +290,7 @@ dialog.modal:focus-visible { outline: none; }
    App shell: always exactly one window, the page never scrolls
    ===================================================================== */
 .app {
-  height: 100dvh; min-width: 1280px; min-height: 660px; overflow: hidden;
+  height: 100dvh; min-width: 720px; min-height: 660px; overflow: hidden; /* 720px: smallest tablet in portrait */
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr; /* plain 1fr (not minmax) so the column change can animate */
   grid-template-rows: var(--statusbar-h) minmax(0, 1fr);
@@ -367,6 +367,17 @@ dialog.modal:focus-visible { outline: none; }
   .app { --sidebar-w: var(--sidebar-rail-w); --r: 1; }
   .nav-item .kbd, .nav-group, .sidebar .note { display: none; }
   .sidebar-toggle { display: none; }
+}
+
+/* Tablets: the status bar drops words, keeping icons (labels stay for screen readers; buttons keep their title tooltip) */
+@media (max-width: 1279.98px) {
+  .statusbar { gap: var(--space-2); }
+  .statusbar .sb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .statusbar .btn:has(.sb-label) { width: 2rem; padding: 0; }
+  .statusbar .kbd { display: none; }
+}
+@media (max-width: 859.98px) {
+  .statusbar .sb-text { display: none; }
 }
 
 
@@ -456,6 +467,25 @@ a.tab { display: inline-block; }
 .metric { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; align-items: center; padding: .6rem 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
 .metric:last-child { border-bottom: 0; }
 .fix { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: var(--space-4); background: var(--surface-tint); border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+
+/* Goals: stat tiles row */
+.goal-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gutter); }
+
+/* ---------- Tablets: when main is narrow, pages reflow and scroll inside main instead of squeezing ---------- */
+@container main (max-width: 72rem) {
+  .today { overflow-y: auto; grid-template-rows: none; align-content: start; }
+  .today .tile { grid-column: span 6; }
+  .coach-card { max-height: 30rem; }
+}
+@container main (max-width: 64rem) {
+  .card-head { flex-wrap: wrap; }
+  .goal-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .week { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto minmax(14rem, 1fr); }
+  .week > .tile:nth-child(3) { grid-column: 1 / -1 !important; } /* beats the tile's inline grid-column: auto */
+}
+@container main (max-width: 56rem) {
+  .focus { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(14rem, 1fr); overflow-y: auto; }
+}
 
 /* Theme switch: the circular reveal is animated from JS (status-bar.tsx); drop the default cross-fade. */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }

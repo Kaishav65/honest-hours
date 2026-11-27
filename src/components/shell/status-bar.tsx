@@ -45,7 +45,7 @@ function InMinutes({ dueMs }: { dueMs: number }) {
   const now = useNow();
   if (now === null || dueMs <= now) return null;
   const min = Math.max(1, Math.round((dueMs - now) / 60_000));
-  return <span className="muted"> · in {min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ""}` : `${min} min`}</span>;
+  return <span className="muted sb-text"> · in {min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ""}` : `${min} min`}</span>;
 }
 
 // Live state and next check-in come from the check-in controller (see lib/checkin/store.ts).
@@ -86,7 +86,7 @@ export function StatusBar() {
       <div className="vsep" />
       <span className="status-item">
         <Bell className="lucide" aria-hidden />
-        Next check-in <b>{nextDueMs ? formatClock(nextDueMs, timeZone) : "—"}</b>
+        <span className="sb-text">Next check-in </span><b>{nextDueMs ? formatClock(nextDueMs, timeZone) : "—"}</b>
         {nextDueMs ? <InMinutes dueMs={nextDueMs} /> : null}
       </span>
       <span className="spacer" />
@@ -111,17 +111,17 @@ export function StatusBar() {
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => sendCommand("busy")} title="Pause popups for a while">
             <Pause className="lucide" aria-hidden />
-            Busy
+            <span className="sb-label">Busy</span>
           </button>
           {routineName && (
             <button className="btn btn-secondary btn-sm" onClick={() => sendCommand("routine")} title={`Log "${routineName}" in one tap`}>
               <Briefcase className="lucide" aria-hidden />
-              {routineName}
+              <span className="sb-label">{routineName}</span>
             </button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => sendCommand("sleep")} title="Stop popups and log sleep">
             <Moon className="lucide" aria-hidden />
-            Going to sleep
+            <span className="sb-label">Going to sleep</span>
           </button>
         </>
       )}
