@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { SettingsView } from "@/components/settings/settings-view";
 import type { SettingsCategory, SettingsProfile, SettingsQuestion } from "@/components/settings/types";
 import type { CategoryKind, QuestionType, SystemKey } from "@/lib/checkin/types";
@@ -8,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export default function SettingsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <SettingsData />
     </Suspense>
   );

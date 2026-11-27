@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { fieldsToAnswers } from "@/lib/checkin/answers";
 import type { Category, CategoryKind, EntryAnswerFields, Question, QuestionType, SystemKey } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/server";
@@ -9,7 +10,7 @@ import { TimelineView } from "@/components/timeline/timeline-view";
 
 export default function TimelinePage({ searchParams }: PageProps<"/timeline">) {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <TimelineData searchParams={searchParams} />
     </Suspense>
   );

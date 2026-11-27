@@ -311,6 +311,14 @@ dialog.modal:focus-visible { outline: none; }
 .state .time { font-variant-numeric: tabular-nums; font-weight: 700; }
 .state .sub { font-weight: 500; opacity: .8; }
 .vsep { width: 1px; height: 1.5rem; background: var(--border); }
+
+/* Page-load indicator: sprout in a spinning green ring. Fades in after a short delay so fast navigations never flash it. */
+.page-loading { height: 100%; display: grid; place-items: center; opacity: 0; animation: loader-in .2s .15s forwards; }
+.page-loading .spin { position: relative; display: grid; place-items: center; width: 4rem; height: 4rem; color: var(--primary); }
+.page-loading .spin::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--primary-soft); border-top-color: var(--primary); animation: loader-spin .9s linear infinite; }
+.page-loading .lucide { width: 1.5rem; height: 1.5rem; }
+@keyframes loader-in { to { opacity: 1; } }
+@keyframes loader-spin { to { transform: rotate(360deg); } }
 .status-item { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--text-sm); color: var(--ink-2); white-space: nowrap; }
 .status-item b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .streak { display: inline-flex; align-items: center; gap: .3rem; height: 2rem; padding: 0 .7rem; border-radius: var(--radius-pill); background: var(--honey-soft); color: var(--honey-ink); font-weight: 700; font-size: var(--text-sm); }

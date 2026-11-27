@@ -3,13 +3,14 @@ import { Check, Recycle, Sunrise, Target, TrendingUp, TriangleAlert } from "luci
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type CSSProperties } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { loadWeek } from "@/lib/insights/week-data";
 import { WEEK_UNLOCK_DAYS, type Metric } from "@/lib/insights/weekly";
 import { createClient } from "@/lib/supabase/server";
 
 export default function InsightsPage({ searchParams }: PageProps<"/insights">) {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <InsightsData searchParams={searchParams} />
     </Suspense>
   );

@@ -3,6 +3,7 @@ import { CalendarCheck, Flame, Snowflake, Trophy } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { HeatGrid } from "@/components/goals/heat-grid";
 import { heatColumns } from "@/lib/insights/heatmap";
 import { FREEZE_EVERY, MAX_FREEZES, streakSummary } from "@/lib/insights/streak";
@@ -11,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export default function GoalsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <GoalsData />
     </Suspense>
   );

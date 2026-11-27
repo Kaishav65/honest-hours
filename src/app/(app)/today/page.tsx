@@ -3,6 +3,7 @@ import { ArrowRight, CircleCheck, Flame, Gauge, Hourglass, House, Play, Smartpho
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type CSSProperties, type ReactNode } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { CategoryIcon } from "@/components/checkin/category-icon";
 import type { CategoryKind } from "@/lib/checkin/types";
 import { formatClock } from "@/lib/checkin/store";
@@ -20,7 +21,7 @@ import { streakAtRiskNudge } from "@/lib/coach/nudges";
 
 export default function TodayPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <TodayData />
     </Suspense>
   );

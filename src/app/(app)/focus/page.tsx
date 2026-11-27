@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PageLoading } from "@/components/shell/page-loading";
 import { FocusView, type Session, type Subject } from "@/components/focus/focus-view";
 import { createClient } from "@/lib/supabase/server";
 import { dayOf } from "@/lib/time";
 
 export default function FocusPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <FocusData />
     </Suspense>
   );

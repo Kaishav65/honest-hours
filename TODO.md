@@ -2,7 +2,7 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-27 (v2 Step 20 done: Settings extras — see Step 20 under "Later")
+> Last updated: 2026-11-27 (polish: page-load indicator — see "Polish: page-load indicator")
 
 **Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded, smoke-tested in a real browser (Chrome via Playwright) and in daily use since 2026-11-21. Step 11: PWA + Vercel deploy done (deploy reported by the user, not checked in this session); installing the PWA from the live URL still to confirm. v2 started: Steps 12–20 done (Step 20 = Settings extras). **Next: v2 Step 21 — Look: Clean / Notebook** (the last v2 step) (v2 is broken into Steps 12–21 under "Later").
 
@@ -359,3 +359,9 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Not verified:** "all UI components" = the sidebar and page-width change only; cards inside pages just reflow with the width (no per-card animation). Dark theme; reduced-motion users get the (near-instant) global setting.
 - **Tuned (same day):** sidebar animation slowed from 200 ms ease-out to 450 ms ease-in-out (`--rail-dur`, `--rail-ease` on `.app` in components.css) at the user's request; measured width 225 → 66 over ~450 ms.
 - **Tuned again:** `--rail-dur` 450 ms → 400 ms (user's choice).
+
+### Polish: page-load indicator (2026-11-27)
+- **Done:** while a page's data loads, the content area shows the Sprout icon inside a spinning green ring (sidebar and status bar stay). New `components/shell/page-loading.tsx` (`PageLoading`), `app/(app)/loading.tsx` renders it, CSS `.page-loading` in `components.css`; it fades in after 150 ms so quick navigations don't flash it. The six pages (today, timeline, focus, goals, insights, settings) now use `<Suspense fallback={<PageLoading />}>` (one import + one line each).
+- **Decisions:** options were (a) one loader (b) per-page skeletons. Chose (a) as asked; skeletons would add a file per page. Just adding `loading.tsx` was not enough: each page already wrapped its data in an empty `<Suspense>`, which caught the loading state first, so the fallback had to be set there. Named the CSS class `.spin` because `.ring` is already the progress-ring class.
+- **Verified:** tsc clean; Playwright (real account, read-only) with throttled network: clicking Insights shows the loader (screenshot: sprout centred, ring arc visible) and it disappears once the page arrives.
+- **Not verified:** how long the loader is visible on real (unthrottled) navigations; dark theme; reduced-motion; the other five pages (same one-line change, only Insights was exercised).
