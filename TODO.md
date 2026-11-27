@@ -324,3 +324,10 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Decisions:** reused `.tip` instead of a new tooltip so both match; the grid became a client component because the card needs pointer position (the page stays a server component).
 - **Verified:** `tsc --noEmit` clean, `heatmap.test.ts` passes.
 - **Not verified:** not checked visually in a browser (including dark theme).
+
+### Polish: match design preview — status chip, live ribbon, sleep button (2026-11-27)
+- **Done:** (1) status chip uses the green "study" kind in normal tracking, so its pulse dot shows; next check-in shows "· in N min" (`status-bar.tsx`). (2) ribbon: the block running up to now gets `.live` (shimmer sweep, hatch kept for gaps) and the Now marker reads "Now 9:12 PM" (`day-ribbon.tsx`, `today/page.tsx`, `components.css`). (4) "Going to sleep" is `btn-secondary` so it reads as a button.
+- **Decisions:** the preview's CSS already matched the app; the gaps were in the markup, so no new styles except a hatch-preserving live variant. Sleep button: bordered secondary instead of ghost (ghost looked like plain text). Item 3 (Start pomodoro placement) is a suggestion only, not implemented.
+- **Verified:** `tsc --noEmit` clean; Playwright (real account, read-only, nothing written): chip is green with the `pulse` animation, "in 8 min" shows, one `.blk.live` with the `live-hatch` animation, marker reads "Now 10:06 AM", sleep button is bordered secondary. Screenshot looked right.
+- **Not verified:** dark theme. The Now label time is server-rendered, so it updates on refresh/navigation, not every second.
+- **Fix (same day): ribbon sweep was invisible.** Cause: the sweep was a white 35% background layer, and the live block is only ~21px wide and hatched beige, so it barely showed (animation was running, checked via `getAnimations()`). Now `.blk.live::after` slides a brighter highlight band across the block (`components.css`). Verified with Playwright screenshots at 3x: highlight visible in one frame, elsewhere in the next. Dark variant not checked.

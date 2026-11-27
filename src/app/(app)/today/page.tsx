@@ -181,6 +181,8 @@ async function TodayData() {
       s: Math.round((b.startMs - day.startMs) / MIN),
       d: Math.round((b.endMs - b.startMs) / MIN),
       hint: "click to open the Timeline",
+      // The block running up to "now" (only while the day is still going) shimmers like the design preview.
+      live: nowMs < day.endMs && b.endMs >= nowMs - MIN && b.startMs < nowMs,
     };
   });
   const nowOffset = Math.round((Math.min(nowMs, day.endMs) - day.startMs) / MIN);
@@ -379,7 +381,7 @@ async function TodayData() {
             {Math.abs(usualSleepOffset - nowOffset) > 120 && <span>Usual sleep</span>}
           </div>
           <div className="mark" style={{ "--s": nowOffset } as CSSProperties}>
-            <span>Now</span>
+            <span>Now {formatClock(nowMs, tz)}</span>
           </div>
         </DayRibbon>
         <div className="axis" aria-hidden>

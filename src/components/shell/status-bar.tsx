@@ -14,16 +14,38 @@ import {
 import { formatTimer } from "@/lib/checkin/pomodoro";
 import { useNow } from "@/lib/checkin/use-now";
 
-function toggleTheme() {
+// Light/dark switch: the new theme spreads out as a circle from the button over the whole page (View Transitions API).
+function toggleTheme(e: React.MouseEvent<HTMLButtonElement>) {
   const root = document.documentElement;
   const next = root.dataset.theme === "dark" ? "light" : "dark";
-  root.dataset.theme = next;
-  localStorage.setItem("hh-theme", next);
+  const apply = () => {
+    root.dataset.theme = next;
+    localStorage.setItem("hh-theme", next);
+  };
+  if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = r.left + r.width / 2;
+  const y = r.top + r.height / 2;
+  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  const t = document.startViewTransition(apply);
+  t.ready.then(() =>
+    root.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 650, easing: "ease-in-out", pseudoElement: "::view-transition-new(root)" },
+    ),
+  );
 }
 
 function PomodoroClock({ untilMs }: { untilMs: number }) {
   const now = useNow();
   return <span className="time">{now === null ? "--:--" : formatTimer(untilMs - now)}</span>;
+}
+
+function InMinutes({ dueMs }: { dueMs: number }) {
+  const now = useNow();
+  if (now === null || dueMs <= now) return null;
+  const min = Math.max(1, Math.round((dueMs - now) / 60_000));
+  return <span className="muted"> · in {min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ""}` : `${min} min`}</span>;
 }
 
 // Live state and next check-in come from the check-in controller (see lib/checkin/store.ts).
@@ -37,7 +59,7 @@ export function StatusBar() {
 
   return (
     <header className="statusbar">
-      <div className="state" data-kind={status === "busy" ? "busy" : status === "sleeping" ? "sleep" : status === "pomodoro" ? "study" : "unknown"}>
+      <div className="state" data-kind={status === "busy" ? "busy" : status === "sleeping" ? "sleep" : status === "pomodoro" || status === "normal" ? "study" : "unknown"}>
         <span className="pulse" />
         <span>
           {status === "busy" && (
@@ -65,6 +87,7 @@ export function StatusBar() {
       <span className="status-item">
         <Bell className="lucide" aria-hidden />
         Next check-in <b>{nextDueMs ? formatClock(nextDueMs, timeZone) : "—"}</b>
+        {nextDueMs ? <InMinutes dueMs={nextDueMs} /> : null}
       </span>
       <span className="spacer" />
       {streak && (
@@ -96,7 +119,7 @@ export function StatusBar() {
               {routineName}
             </button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={() => sendCommand("sleep")} title="Stop popups and log sleep">
+          <button className="btn btn-secondary btn-sm" onClick={() => sendCommand("sleep")} title="Stop popups and log sleep">
             <Moon className="lucide" aria-hidden />
             Going to sleep
           </button>
@@ -126,7 +149,7 @@ export function StatusBar() {
         </button>
       )}
       <button
-        className="btn btn-ghost btn-icon btn-sm"
+        className="btn btn-secondary btn-icon btn-sm"
         onClick={toggleTheme}
         title="Toggle light / dark"
         aria-label="Toggle light / dark"
