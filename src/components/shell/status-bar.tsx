@@ -1,20 +1,29 @@
 "use client";
 
 import { Bell, Briefcase, Flame, Moon, Pause, Plus, Snowflake, Square, Sun, SunMoon } from "lucide-react";
+import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import {
   formatClock,
   getCheckinStatus,
   getServerCheckinStatus,
   sendCommand,
+  sendPomodoro,
   subscribeCheckin,
 } from "@/lib/checkin/store";
+import { formatTimer } from "@/lib/checkin/pomodoro";
+import { useNow } from "@/lib/checkin/use-now";
 
 function toggleTheme() {
   const root = document.documentElement;
   const next = root.dataset.theme === "dark" ? "light" : "dark";
   root.dataset.theme = next;
   localStorage.setItem("hh-theme", next);
+}
+
+function PomodoroClock({ untilMs }: { untilMs: number }) {
+  const now = useNow();
+  return <span className="time">{now === null ? "--:--" : formatTimer(untilMs - now)}</span>;
 }
 
 // Live state and next check-in come from the check-in controller (see lib/checkin/store.ts).
@@ -28,7 +37,7 @@ export function StatusBar() {
 
   return (
     <header className="statusbar">
-      <div className="state" data-kind={status === "busy" ? "busy" : status === "sleeping" ? "sleep" : "unknown"}>
+      <div className="state" data-kind={status === "busy" ? "busy" : status === "sleeping" ? "sleep" : status === "pomodoro" ? "study" : "unknown"}>
         <span className="pulse" />
         <span>
           {status === "busy" && (
@@ -41,6 +50,12 @@ export function StatusBar() {
             <>
               Sleeping
               {mode.sinceMs ? <span className="sub"> · since {formatClock(mode.sinceMs, timeZone)}</span> : null}
+            </>
+          )}
+          {status === "pomodoro" && (
+            <>
+              Now: Study{mode.label ? ` (${mode.label})` : ""}{" "}
+              {mode.untilMs ? <PomodoroClock untilMs={mode.untilMs} /> : null}
             </>
           )}
           {status === "normal" && "Now: Tracking"}
@@ -92,6 +107,17 @@ export function StatusBar() {
           <Square className="lucide" aria-hidden />
           End busy
         </button>
+      )}
+      {status === "pomodoro" && (
+        <>
+          <Link href="/focus" className="btn btn-secondary btn-sm">
+            Focus
+          </Link>
+          <button className="btn btn-secondary btn-sm" onClick={() => sendPomodoro({ type: "stop" })}>
+            <Square className="lucide" aria-hidden />
+            Stop early
+          </button>
+        </>
       )}
       {status === "sleeping" && (
         <button className="btn btn-primary btn-sm" onClick={() => sendCommand("awake")}>

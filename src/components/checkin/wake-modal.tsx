@@ -2,6 +2,7 @@
 
 import { Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { GOAL_MAX_CHARS } from "@/lib/checkin/review";
 import { clockOf } from "@/lib/checkin/status";
 import { formatClock } from "@/lib/checkin/store";
 import { dayOf } from "@/lib/time";
@@ -12,6 +13,8 @@ export type WakeInput = {
   sleepClock: string | null;
   /** Only after a gap (see `gapSinceMs`): when you woke. Otherwise you woke now. */
   wakeClock: string | null;
+  /** Today's one goal, only asked when none was set last night. */
+  goal: string | null;
 };
 
 type Props = {
@@ -28,6 +31,8 @@ type Props = {
   dayStartHour: number;
   weekdayGoalMin: number;
   weekendGoalMin: number;
+  /** True when today has no one-goal yet (the evening review sets it the night before). */
+  askGoal?: boolean;
   onSubmit: (input: WakeInput) => Promise<string | null>;
 };
 
@@ -44,6 +49,7 @@ export function WakeModal({
   dayStartHour,
   weekdayGoalMin,
   weekendGoalMin,
+  askGoal,
   onSubmit,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -59,6 +65,7 @@ export function WakeModal({
     gap && Date.now() - sleepSinceMs > 12 * 60 * 60_000 ? "23:00" : clockOf(sleepSinceMs, timeZone),
   );
   const [wakeClock, setWakeClock] = useState(() => clockOf(Date.now(), timeZone));
+  const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +84,7 @@ export function WakeModal({
       planMin: plan,
       sleepClock: askSleepTime || gap ? sleepClock : null,
       wakeClock: gap ? wakeClock : null,
+      goal: askGoal ? goal : null,
     });
     if (err) {
       setError(err);
@@ -164,6 +172,20 @@ export function WakeModal({
             ))}
           </div>
         </div>
+        {askGoal && (
+          <div className="field">
+            <label htmlFor="today-goal">Today&apos;s one goal</label>
+            <input
+              id="today-goal"
+              className="input"
+              value={goal}
+              maxLength={GOAL_MAX_CHARS}
+              placeholder="e.g. Finish the graphs problem set before 10"
+              onChange={(e) => setGoal(e.target.value)}
+            />
+            <span className="help">Optional. It shows on Today.</span>
+          </div>
+        )}
         {error && (
           <p className="sm" role="alert" style={{ color: "var(--danger)" }}>
             {error}

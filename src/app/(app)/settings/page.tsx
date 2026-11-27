@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { SettingsView } from "@/components/settings/settings-view";
-import type { SettingsCategory, SettingsQuestion } from "@/components/settings/types";
+import type { SettingsCategory, SettingsProfile, SettingsQuestion } from "@/components/settings/types";
 import type { CategoryKind, QuestionType, SystemKey } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +24,7 @@ async function SettingsData() {
   const [profile, cats, qs] = await Promise.all([
     supabase
       .from("profiles")
-      .select("display_name, timezone, day_start_hour, checkin_interval_min, weekday_goal_min, weekend_goal_min, settings")
+      .select("display_name, timezone, day_start_hour, checkin_interval_min, weekday_goal_min, weekend_goal_min, coach_strictness, settings")
       .eq("id", userId)
       .single(),
     supabase.from("categories").select("id, name, icon, kind, value, sort_order, archived").order("sort_order"),
@@ -67,6 +67,7 @@ async function SettingsData() {
         checkinIntervalMin: p.checkin_interval_min,
         weekdayGoalMin: p.weekday_goal_min,
         weekendGoalMin: p.weekend_goal_min,
+        coachStrictness: p.coach_strictness as SettingsProfile["coachStrictness"],
         settings: (p.settings ?? {}) as Record<string, unknown>,
       }}
       categories={categories}

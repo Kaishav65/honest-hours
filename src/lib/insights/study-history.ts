@@ -1,8 +1,8 @@
-import type { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { dayOf } from "@/lib/time";
 import { daysBetween, minutesIn, type StudyDay } from "./streak";
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
+type Supabase = SupabaseClient;
 type Profile = { timezone: string; day_start_hour: number; weekday_goal_min: number; weekend_goal_min: number };
 const PAGE = 1000; // PostgREST returns at most 1000 rows per request
 

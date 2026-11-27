@@ -4,7 +4,9 @@ import { parseRoutineItems } from "@/lib/checkin/office";
 import { computeStreak } from "@/lib/insights/streak";
 import { loadStudyHistory } from "@/lib/insights/study-history";
 import type { Answers, Category, CategoryKind, EntryAnswerFields, Question, QuestionType, SystemKey } from "@/lib/checkin/types";
+import type { Strictness } from "@/lib/coach/templates";
 import { createClient } from "@/lib/supabase/server";
+import { dayOf } from "@/lib/time";
 import type { BusyPreset } from "./busy-modal";
 import { CheckinController } from "./checkin-controller";
 
@@ -16,11 +18,14 @@ export async function CheckinHost() {
   const userId = claims?.claims.sub;
   if (!userId) return null;
 
-  const [profile, cats, qs, recent, routines] = await Promise.all([
+  // Rendered per request (after connection()), so reading the clock here is safe.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+  const [profile, cats, qs, recent, routines, openPomodoro, coachRows, sleepRows] = await Promise.all([
     supabase.from("profiles").select(
-        "timezone, day_start_hour, checkin_interval_min, status, status_since, status_until, status_label, weekday_goal_min, weekend_goal_min, settings",
+        "timezone, day_start_hour, checkin_interval_min, status, status_since, status_until, status_label, weekday_goal_min, weekend_goal_min, coach_strictness, settings",
       ).eq("id", userId).single(),
-    supabase.from("categories").select("id, name, icon, kind").eq("archived", false).order("sort_order"),
+    supabase.from("categories").select("id, name, icon, kind, value").eq("archived", false).order("sort_order"),
     supabase
       .from("category_questions")
       .select("id, category_id, label, type, options, system_key")
@@ -32,12 +37,22 @@ export async function CheckinHost() {
       .order("end_at", { ascending: false })
       .limit(150),
     supabase.from("routines").select("name, items").order("sort_order").limit(1),
+    supabase
+      .from("pomodoros")
+      .select("id, subject_id, planned_min")
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1),
+    supabase.from("coach_messages").select("rule_key, severity, created_at").order("created_at", { ascending: false }).limit(60),
+    supabase.from("entries").select("start_at, categories!inner(kind)").eq("categories.kind", "sleep").gte("start_at", new Date(nowMs - 14 * 86_400_000).toISOString()),
   ]);
   if (!profile.data || !cats.data || !qs.data || !recent.data) return null;
-  // Rendered per request (after connection()), so reading the clock here is safe.
+  const today = dayOf(nowMs, profile.data.timezone, profile.data.day_start_hour);
+  const { data: dayLog } = await supabase.from("day_logs").select("review_done, tomorrow_goal").eq("day", today.date).maybeSingle();
   // eslint-disable-next-line react-hooks/purity
   const { history } = await loadStudyHistory(supabase, profile.data, Date.now());
   const { streak, freezes } = computeStreak(history);
+  const pomodoroRow = profile.data.status === "pomodoro" ? openPomodoro.data?.[0] : undefined;
   const routineRow = routines.data?.[0];
   const routine = routineRow ? { name: routineRow.name, items: parseRoutineItems(routineRow.items) } : null;
 
@@ -82,6 +97,7 @@ export async function CheckinHost() {
       weekdayGoalMin={profile.data.weekday_goal_min}
       weekendGoalMin={profile.data.weekend_goal_min}
       busyPresets={busyPresets}
+      pomodoro={pomodoroRow ? { id: pomodoroRow.id, subjectId: pomodoroRow.subject_id, plannedMin: pomodoroRow.planned_min } : null}
       settings={profile.data.settings}
       routine={routine && routine.items.length > 0 ? routine : null}
       categories={categories}
@@ -90,6 +106,11 @@ export async function CheckinHost() {
       lastEntry={newest ? { categoryId: newest.category_id, answers: lastAnswers[newest.category_id] } : null}
       lastAnswers={lastAnswers}
       streak={{ days: streak, freezes }}
+      strictness={profile.data.coach_strictness as Strictness}
+      coachRecent={(coachRows.data ?? []).map((m) => ({ rule: m.rule_key, severity: m.severity, createdMs: Date.parse(m.created_at) }))}
+      sleepStarts={(sleepRows.data ?? []).map((r) => Date.parse(r.start_at))}
+      reviewDone={dayLog?.review_done ?? false}
+      todayGoal={dayLog?.tomorrow_goal ?? null}
     />
   );
 }

@@ -13,6 +13,8 @@ export type Category = {
   name: string;
   icon: string | null;
   kind: CategoryKind;
+  /** Wasted time = value "waste" and not planned. Present where the coach needs it. */
+  value?: "productive" | "neutral" | "waste";
 };
 
 export type SystemKey = "planned" | "trigger" | "focus" | "phone_checks" | "mood_after";

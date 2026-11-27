@@ -28,17 +28,13 @@ type Props = { profile: SettingsProfile; onChanged: () => void };
 export function ScheduleTab({ profile, onChanged }: Props) {
   const [interval, setInterval] = useState(profile.checkinIntervalMin);
   const [dayStart, setDayStart] = useState(profile.dayStartHour);
-  const [weekdayGoal, setWeekdayGoal] = useState(String(profile.weekdayGoalMin / 60));
-  const [weekendGoal, setWeekendGoal] = useState(String(profile.weekendGoalMin / 60));
   const [weekday, setWeekday] = useState(readDay(profile.settings, "weekday"));
   const [weekend, setWeekend] = useState(readDay(profile.settings, "weekend"));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const goalMin = (v: string) => Math.round(Number(v) * 60);
-  const goalOk = (v: string) => v.trim() !== "" && goalMin(v) >= 0 && goalMin(v) <= 1440;
   const officeOk = (d: DaySchedule) => !d.office || (d.office_start < d.office_end && d.office_start !== "" && d.office_end !== "");
-  const valid = goalOk(weekdayGoal) && goalOk(weekendGoal) && officeOk(weekday) && officeOk(weekend);
+  const valid = officeOk(weekday) && officeOk(weekend);
 
   async function save() {
     setBusy(true);
@@ -48,8 +44,6 @@ export function ScheduleTab({ profile, onChanged }: Props) {
       .update({
         checkin_interval_min: interval,
         day_start_hour: dayStart,
-        weekday_goal_min: goalMin(weekdayGoal),
-        weekend_goal_min: goalMin(weekendGoal),
         settings: { ...profile.settings, schedule: { weekday, weekend } },
       })
       .eq("id", profile.id);
@@ -80,18 +74,6 @@ export function ScheduleTab({ profile, onChanged }: Props) {
           ))}
         </select>
         <span className="help">Time before this still counts towards the evening before (study at 1 AM belongs to yesterday).</span>
-      </div>
-
-      <div className="row" style={{ gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div className="field">
-          <label htmlFor="goal-wd">Weekday study goal (hours)</label>
-          <input id="goal-wd" className="input" style={{ width: "8rem" }} type="number" min={0} max={24} step={0.25} value={weekdayGoal} onChange={(e) => setWeekdayGoal(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="goal-we">Weekend study goal (hours)</label>
-          <input id="goal-we" className="input" style={{ width: "8rem" }} type="number" min={0} max={24} step={0.25} value={weekendGoal} onChange={(e) => setWeekendGoal(e.target.value)} />
-        </div>
-        <span className="help" style={{ alignSelf: "center", maxWidth: "16rem" }}>Past days keep the goal they had.</span>
       </div>
 
       <OfficeBlock title="Weekdays (Mon–Fri)" id="wd" value={weekday} onChange={setWeekday} />

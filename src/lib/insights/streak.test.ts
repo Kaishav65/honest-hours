@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dayForDate, zonedTimeToMs } from "@/lib/time";
-import { computeStreak, daysBetween, minutesIn, onTrack, restOfDaySamples, type StudyDay } from "./streak";
+import { computeStreak, daysBetween, minutesIn, onTrack, pastOutcomes, restOfDaySamples, streakSummary, type StudyDay } from "./streak";
 
 const TZ = "Asia/Kolkata";
 const at = (date: string, hhmm: string) => {
@@ -75,5 +75,41 @@ describe("restOfDaySamples", () => {
     ];
     // 20 Oct is older than 28 days, 22 Nov is a weekend day, 26 Nov is today
     expect(restOfDaySamples(history, today, at("2026-11-26", "20:00"), study)).toEqual([60, 90]);
+  });
+});
+
+describe("pastOutcomes", () => {
+  it("reports met / frozen / broken days with the running streak and earned freezes", () => {
+    const o = pastOutcomes(days(120, 120, 120, 120, 120, 0, 0));
+    expect(o[4]).toMatchObject({ met: true, streak: 5, freezes: 1, earnedFreeze: true });
+    expect(o[5]).toMatchObject({ met: false, frozen: true, streak: 6, freezes: 0 });
+    expect(o[6]).toMatchObject({ met: false, frozen: false, streak: 0 });
+  });
+});
+
+describe("streakSummary", () => {
+  const d = (date: string): StudyDay["day"] => dayForDate(date, TZ, 3);
+  const mk = (rows: [string, number][]): StudyDay[] => rows.map(([date, studyMin]) => ({ day: d(date), studyMin, goalMin: 120 }));
+  it("cells, current/best streak, freezes and their history match computeStreak", () => {
+    const history = mk([
+      ["2026-11-01", 120], ["2026-11-02", 120], ["2026-11-03", 120], ["2026-11-04", 120], ["2026-11-05", 120], // freeze earned
+      ["2026-11-06", 10], // freeze used
+      ["2026-11-07", 10], // broken
+      ["2026-11-08", 130], // met, today
+    ]);
+    const r = streakSummary(history);
+    expect(r.cells.map((c) => c.state)).toEqual(["met", "met", "met", "met", "met", "frozen", "missed", "today"]);
+    expect(r.current).toBe(computeStreak(history).streak);
+    expect(r.current).toBe(1);
+    expect(r.best).toBe(6);
+    expect(r.freezes).toBe(0);
+    expect(r.metDays).toBe(6);
+    expect(r.events).toEqual([{ date: "2026-11-05", type: "earned" }, { date: "2026-11-06", type: "used" }]);
+  });
+  it("today's goal met counts and can earn the freeze", () => {
+    const r = streakSummary(mk([["2026-11-01", 120], ["2026-11-02", 120], ["2026-11-03", 120], ["2026-11-04", 120], ["2026-11-05", 125]]));
+    expect(r.current).toBe(5);
+    expect(r.freezes).toBe(1);
+    expect(r.events).toEqual([{ date: "2026-11-05", type: "earned" }]);
   });
 });

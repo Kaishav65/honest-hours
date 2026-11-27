@@ -187,7 +187,7 @@ function NewCategory({ onCreate, onCancel }: { onCreate: (c: { name: string; ico
               <option key={k.value} value={k.value}>{k.label}</option>
             ))}
           </select>
-          <span className="help">{KIND_HINTS[kind]} Can&apos;t be changed later.</span>
+          <span className="help">{KIND_HINTS[kind]} You can change it later; past days are then recounted.</span>
         </div>
         <div className="field">
           <label htmlFor="nc-value">Counts as</label>
@@ -221,9 +221,10 @@ type Run = (job: PromiseLike<{ error: { code?: string; message: string } | null 
 function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { category: SettingsCategory; questions: SettingsQuestion[]; nextQuestionSort: number; run: Run }) {
   const [name, setName] = useState(c.name);
   const [value, setValue] = useState<CategoryValue>(c.value);
+  const [kind, setKind] = useState<CategoryKind>(c.kind);
   const [icon, setIcon] = useState(c.icon);
   const supabase = createClient();
-  const dirty = name.trim() !== c.name || value !== c.value || icon !== c.icon;
+  const dirty = name.trim() !== c.name || value !== c.value || icon !== c.icon || kind !== c.kind;
 
   return (
     <div style={{ padding: ".4rem .9rem .9rem", display: "grid", gap: "var(--space-3)", borderTop: "1px solid var(--border)" }}>
@@ -233,6 +234,14 @@ function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { cat
           <input id={`n-${c.id}`} className="input" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="field">
+          <label htmlFor={`k-${c.id}`}>Kind</label>
+          <select id={`k-${c.id}`} className="input" value={kind} onChange={(e) => setKind(e.target.value as CategoryKind)}>
+            {KINDS.map((k) => (
+              <option key={k.value} value={k.value}>{k.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
           <label htmlFor={`v-${c.id}`}>Counts as</label>
           <select id={`v-${c.id}`} className="input" value={value} onChange={(e) => setValue(e.target.value as CategoryValue)}>
             {VALUES.map((v) => (
@@ -240,7 +249,7 @@ function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { cat
             ))}
           </select>
         </div>
-        <button className="btn btn-primary btn-sm" disabled={!dirty || !name.trim()} onClick={() => run(supabase.from("categories").update({ name: name.trim(), value, icon }).eq("id", c.id))}>
+        <button className="btn btn-primary btn-sm" disabled={!dirty || !name.trim()} onClick={() => run(supabase.from("categories").update({ name: name.trim(), value, icon, kind }).eq("id", c.id))}>
           Save
         </button>
         <button className="btn btn-secondary btn-sm" onClick={() => run(supabase.from("categories").update({ archived: !c.archived }).eq("id", c.id))}>
@@ -248,6 +257,17 @@ function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { cat
           {c.archived ? "Restore" : "Archive"}
         </button>
       </div>
+      {kind !== c.kind && (
+        <p className="sm" role="status" data-testid="kind-warning" style={{ color: "var(--danger)" }}>
+          Changing the kind recounts every past entry of {c.name}: your study goal, streak, free time, usual bedtime and scores for
+          past days will change too. {KIND_HINTS[kind]}
+        </p>
+      )}
+      {mismatchWarning(kind, value) && (
+        <p className="sm" role="status" style={{ color: "var(--danger)" }}>
+          {mismatchWarning(kind, value)}
+        </p>
+      )}
       <div className="field">
         <label>Icon</label>
         <IconPicker value={icon} onChange={setIcon} />
@@ -259,10 +279,11 @@ function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { cat
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: ".3rem" }}>
           {questions.map((q) => (
             <li key={q.id} className="row sm" style={{ opacity: q.archived ? 0.55 : 1 }}>
-              <span style={{ flex: 1 }}>
-                {q.label} <span className="muted">· {TYPES.find((t) => t.value === q.type)?.label ?? q.type}{q.options?.length ? ` (${q.options.join(", ")})` : ""}</span>
-              </span>
-              {q.systemKey && <span className="badge" title="Used by scores and insights">built-in</span>}
+              <QuestionLabel
+                q={q}
+                onRename={(label) => run(supabase.from("category_questions").update({ label }).eq("id", q.id))}
+              />
+              {q.systemKey && <span className="badge" title="Used by scores and insights. Renaming keeps what it does.">built-in</span>}
               <button className="btn btn-ghost btn-sm" onClick={() => run(supabase.from("category_questions").update({ archived: !q.archived }).eq("id", q.id))}>
                 {q.archived ? "Restore" : "Remove"}
               </button>
@@ -276,6 +297,37 @@ function CategoryDetail({ category: c, questions, nextQuestionSort, run }: { cat
         />
       </div>
     </div>
+  );
+}
+
+function QuestionLabel({ q, onRename }: { q: SettingsQuestion; onRename: (label: string) => Promise<boolean> }) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(q.label);
+  if (!editing) {
+    return (
+      <span style={{ flex: 1 }}>
+        {q.label} <span className="muted">· {TYPES.find((t) => t.value === q.type)?.label ?? q.type}{q.options?.length ? ` (${q.options.join(", ")})` : ""}</span>{" "}
+        <button type="button" className="btn btn-ghost btn-sm" aria-label={`Rename ${q.label}`} onClick={() => { setLabel(q.label); setEditing(true); }}>
+          Rename
+        </button>
+      </span>
+    );
+  }
+  return (
+    <form
+      className="row"
+      style={{ flex: 1, gap: ".4rem" }}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const next = label.trim();
+        if (!next) return;
+        if (next === q.label || (await onRename(next))) setEditing(false);
+      }}
+    >
+      <input className="input" style={{ flex: 1, height: "2rem" }} maxLength={60} aria-label={`New name for ${q.label}`} value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
+      <button className="btn btn-primary btn-sm" disabled={!label.trim()}>Save</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+    </form>
   );
 }
 

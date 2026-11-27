@@ -1,11 +1,13 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SettingsProfile } from "./types";
 
 type Msg = { ok: boolean; text: string } | null;
+const DELETE_WORD = "DELETE";
 const color = (m: NonNullable<Msg>) => (m.ok ? "var(--success)" : "var(--danger)");
 
 function applyTheme(choice: "light" | "dark" | "system") {
@@ -17,12 +19,16 @@ function applyTheme(choice: "light" | "dark" | "system") {
 type Props = { profile: SettingsProfile; onChanged: () => void };
 
 export function AccountTab({ profile, onChanged }: Props) {
+  const router = useRouter();
   const [name, setName] = useState(profile.displayName);
   const [nameMsg, setNameMsg] = useState<Msg>(null);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [pwMsg, setPwMsg] = useState<Msg>(null);
-  const [busy, setBusy] = useState<"name" | "pw" | null>(null);
+  const [busy, setBusy] = useState<"name" | "pw" | "delete" | null>(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState<Msg>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     if (typeof localStorage === "undefined") return "light";
     const t = localStorage.getItem("hh-theme");
@@ -40,6 +46,22 @@ export function AccountTab({ profile, onChanged }: Props) {
     if (error) return setNameMsg({ ok: false, text: "Couldn't save. Check your connection and try again." });
     setNameMsg({ ok: true, text: "Saved." });
     onChanged();
+  }
+
+  async function deleteAccount() {
+    if (confirmText !== DELETE_WORD) return;
+    setBusy("delete");
+    setDeleteMsg(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("delete_my_account");
+    if (error) {
+      setBusy(null);
+      return setDeleteMsg({ ok: false, text: "Couldn't delete the account. Check your connection and try again." });
+    }
+    // The user no longer exists: clear the local session and go to the login page.
+    await supabase.auth.signOut({ scope: "local" });
+    router.replace("/login");
+    router.refresh();
   }
 
   async function savePassword(e: FormEvent) {
@@ -112,6 +134,44 @@ export function AccountTab({ profile, onChanged }: Props) {
           ))}
         </div>
       </div>
+
+      <section className="card" style={{ gap: ".6rem", borderColor: "color-mix(in srgb, var(--danger) 40%, var(--border))" }} aria-labelledby="del-title">
+        <h2 id="del-title" className="card-title" style={{ color: "var(--danger)" }}>
+          Delete my account
+        </h2>
+        <p className="sm">
+          This permanently deletes your account and <b>all</b> your data: entries, goals, streak, coach messages and settings. It can&apos;t be undone.
+        </p>
+        {!deleteOpen ? (
+          <div className="row">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="lucide" aria-hidden /> Delete my account…
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: ".5rem" }}>
+            <div className="field">
+              <label htmlFor="del-confirm">
+                Type <b>{DELETE_WORD}</b> to confirm
+              </label>
+              <input id="del-confirm" className="input" autoComplete="off" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+            </div>
+            <div className="row">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDeleteOpen(false); setConfirmText(""); }} disabled={busy === "delete"}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" style={{ background: "var(--danger)" }} onClick={deleteAccount} disabled={confirmText !== DELETE_WORD || busy !== null}>
+                <Trash2 className="lucide" aria-hidden /> {busy === "delete" ? "Deleting…" : "Delete everything"}
+              </button>
+              {deleteMsg && (
+                <span className="sm" role="alert" style={{ color: "var(--danger)" }}>
+                  {deleteMsg.text}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

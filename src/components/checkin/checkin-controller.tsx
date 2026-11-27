@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { answersToFields } from "@/lib/checkin/answers";
 import { mergeWake } from "@/lib/checkin/day-log";
+import { cleanGoal, reviewDue } from "@/lib/checkin/review";
+import { disciplineScore, focusScore, type ScoreEntry } from "@/lib/insights/scores";
+import { computeToday, usualSleepMs, type InsightEntry } from "@/lib/insights/today";
 import {
   dueWithOffice,
   isOfficeSlot,
@@ -20,14 +23,28 @@ import {
   nextClockOccurrence,
   QUIET_AFTER_MISSED,
 } from "@/lib/checkin/status";
-import { formatClock, onCommand, setCheckinStatus, type Mode } from "@/lib/checkin/store";
+import { pomodoroSpan } from "@/lib/checkin/pomodoro";
+import {
+  formatClock,
+  onCommand,
+  onPomodoro,
+  setCheckinStatus,
+  type Mode,
+  type PomodoroRequest,
+} from "@/lib/checkin/store";
 import type { Answers, Category, LastEntry, Question } from "@/lib/checkin/types";
 import { createClient } from "@/lib/supabase/client";
-import { dayOf, splitSlot } from "@/lib/time";
+import { dayOf, localParts, splitSlot } from "@/lib/time";
 import { BusyModal, type BusyChoice, type BusyPreset } from "./busy-modal";
 import { CheckinModal, type SavePart } from "./checkin-modal";
 import { NoticeModal } from "./notice-modal";
+import { CoachToast, type ToastMessage } from "@/components/coach/coach-toast";
+import { loadCoachFacts } from "@/lib/coach/facts";
+import { candidatesFor, canNotify, pick, type CoachEvent, type SavedEntry, type ShownMessage } from "@/lib/coach/rules";
+import type { Strictness } from "@/lib/coach/templates";
 import { OfficeModal } from "./office-modal";
+import { ReviewModal, type ReviewSummary } from "./review-modal";
+import { PomodoroEndModal, type PomodoroResult } from "./pomodoro-end-modal";
 import { WakeModal, type WakeInput } from "./wake-modal";
 
 type Props = {
@@ -35,7 +52,7 @@ type Props = {
   timeZone: string;
   dayStartHour: number;
   intervalMin: number;
-  /** profiles.status. Popups only appear while "normal". "pomodoro" arrives in v2. */
+  /** profiles.status. Popups only appear while "normal". */
   status: string;
   statusSinceMs: number | null;
   statusUntilMs: number | null;
@@ -43,6 +60,8 @@ type Props = {
   weekdayGoalMin: number;
   weekendGoalMin: number;
   busyPresets: BusyPreset[];
+  /** The running pomodoro (the open `pomodoros` row), when status is "pomodoro". */
+  pomodoro: { id: string; subjectId: string | null; plannedMin: number } | null;
   /** profiles.settings (office hours per day type). */
   settings: unknown;
   /** The one-tap routine (e.g. "Office day"), or null. */
@@ -54,6 +73,14 @@ type Props = {
   lastAnswers: Record<string, Answers>;
   /** For the status bar. */
   streak: { days: number; freezes: number };
+  /** Start times of sleep entries in the last 14 days (for the usual sleep time). */
+  sleepStarts: number[];
+  /** Today's day_logs: review already saved? one-goal already set? */
+  reviewDone: boolean;
+  todayGoal: string | null;
+  /** Coach wording level, and the messages already shown (newest first). */
+  strictness: Strictness;
+  coachRecent: ShownMessage[];
 };
 
 type Prompt = {
@@ -77,7 +104,7 @@ function isTyping(target: EventTarget | null) {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-const toStatus = (s: string): Status => (s === "busy" || s === "sleeping" ? s : "normal");
+const toStatus = (s: string): Status => (s === "busy" || s === "sleeping" || s === "pomodoro" ? s : "normal");
 
 // Owns the check-in timer, the popups, and Busy / Sleep. All timing comes from saved timestamps, not
 // from counting timers, because background tabs throttle timers: after 70 minutes away the next
@@ -103,7 +130,19 @@ export function CheckinController(props: Props) {
   /** Last entry's end when the Good-morning popup opened after a gap (not sleeping), else null. */
   const [gapSince, setGapSince] = useState<number | null>(null);
   const [busyOpen, setBusyOpen] = useState(false);
+  const [pomo, setPomo] = useState(props.pomodoro);
+  /** Set when the timer ran out or was stopped: the end popup is open until it is saved. */
+  const [pomoEnd, setPomoEnd] = useState<{ endMs: number; completed: boolean } | null>(null);
+  /** The evening review: opened by itself before usual sleep, or from "Going to sleep" (`thenSleep`). */
+  const [review, setReview] = useState<{ summary: ReviewSummary | null; currentGoal: string | null; thenSleep: boolean } | null>(null);
+  const [reviewSaved, setReviewSaved] = useState(false);
+  // Set the moment a popup / the review opens, so two effects firing in the same tick can't both open one.
+  const promptOpen = useRef(false);
+  const reviewOpen = useRef(false);
   const missedInARow = useRef(0);
+  const shownMessages = useRef(props.coachRecent);
+  const coachChain = useRef<Promise<void>>(Promise.resolve());
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const routineBusy = useRef(false);
   const [, bump] = useState(0);
 
@@ -116,7 +155,8 @@ export function CheckinController(props: Props) {
     dueBase === null
       ? null
       : dueWithOffice(dueBase, intervalMin, officeWindow(dueBase, timeZone, dayStartHour, props.settings));
-  const active = mode.status === "normal" && !wakeOpen && !busyOpen;
+  const active = mode.status === "normal" && !wakeOpen && !busyOpen && !review;
+  const pomodoroRunning = mode.status === "pomodoro" && pomo !== null && mode.untilMs !== null && mode.sinceMs !== null;
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -153,6 +193,26 @@ export function CheckinController(props: Props) {
     return () => clearTimeout(id);
   }, [props.lastEndMs]);
 
+  // Status says "pomodoro" but there is no open session (e.g. the row was lost): go back to normal.
+  useEffect(() => {
+    if (props.status === "pomodoro" && !props.pomodoro) {
+      void updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on mount
+  }, []);
+
+  // Clear the guards only when a popup really closes (not on mount: StrictMode re-runs effects with stale state).
+  const wasPrompt = useRef(false);
+  const wasReview = useRef(false);
+  useEffect(() => {
+    if (wasPrompt.current && prompt === null) promptOpen.current = false;
+    wasPrompt.current = prompt !== null;
+  }, [prompt]);
+  useEffect(() => {
+    if (wasReview.current && review === null) reviewOpen.current = false;
+    wasReview.current = review !== null;
+  }, [review]);
+
   // Sound needs a first click/key press on the page before the browser allows it.
   useEffect(() => armChime(), []);
 
@@ -160,11 +220,12 @@ export function CheckinController(props: Props) {
     (subtitle?: string) => {
       const now = Date.now();
       const endMs = floorToMinute(now);
-      if (slotStart === null || endMs - slotStart < 60_000) return;
+      if (slotStart === null || endMs - slotStart < 60_000 || reviewOpen.current) return;
       const office =
         !subtitle &&
         officeCat !== undefined &&
         isOfficeSlot({ startMs: slotStart, endMs }, officeWindow(slotStart, timeZone, dayStartHour, props.settings));
+      promptOpen.current = true;
       setPrompt({ startMs: slotStart, endMs, promptedAt: now, subtitle, office });
       if (document.hidden) playChime();
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -235,6 +296,7 @@ export function CheckinController(props: Props) {
       if (now - prompt.promptedAt < intervalMin * 60_000) return;
       recordCheckin(prompt.promptedAt, "missed");
       missedInARow.current += 1;
+      if (missedInARow.current >= 3) emitCoach(() => ({ type: "missed", count: missedInARow.current }));
       setPrompt(null);
       if (missedInARow.current >= QUIET_AFTER_MISSED && isLateNight(now, timeZone, dayStartHour)) {
         missedInARow.current = 0;
@@ -276,6 +338,354 @@ export function CheckinController(props: Props) {
       document.removeEventListener("visibilitychange", check);
     };
   }, [mode.status, mode.untilMs, endBusy]);
+
+  // A pomodoro ends at its end time (also if the app was closed meanwhile): chime, notification, then the end popup.
+  useEffect(() => {
+    if (!pomodoroRunning || pomoEnd || mode.untilMs === null) return;
+    const until = mode.untilMs;
+    const check = () => {
+      if (Date.now() < until) return;
+      setPomoEnd({ endMs: until, completed: true });
+      playChime();
+      if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const n = new Notification("Honest Hours", {
+          body: `${mode.label ?? "Your session"} is done. How did it go?`,
+          tag: "hh-pomodoro",
+        });
+        n.onclick = () => window.focus();
+      }
+    };
+    check();
+    const id = setInterval(check, 1000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [pomodoroRunning, pomoEnd, mode.untilMs, mode.label]);
+
+  async function startPomodoro(req: PomodoroRequest) {
+    if (mode.status !== "normal" || prompt || wakeOpen || busyOpen) {
+      setNotice({ title: "Focus", message: "Finish what's open first (popup, busy or sleep), then start the session." });
+      return;
+    }
+    const supabase = createClient();
+    const startedMs = Date.now();
+    const { data, error } = await supabase
+      .from("pomodoros")
+      .insert({ subject_id: req.subjectId, started_at: new Date(startedMs).toISOString(), planned_min: req.minutes })
+      .select("id")
+      .single();
+    if (error || !data) {
+      setNotice({ title: "Focus", message: "Couldn't start the session. Check your connection and try again." });
+      return;
+    }
+    const err = await updateStatus({
+      status: "pomodoro",
+      label: req.subjectName,
+      sinceMs: startedMs,
+      untilMs: startedMs + req.minutes * 60_000,
+    });
+    if (err) {
+      await supabase.from("pomodoros").delete().eq("id", data.id);
+      setNotice({ title: "Focus", message: err });
+      return;
+    }
+    setPomo({ id: data.id, subjectId: req.subjectId, plannedMin: req.minutes });
+    setPomoEnd(null);
+    markActedOn();
+  }
+
+  async function stopPomodoro() {
+    if (!pomodoroRunning || pomoEnd || !pomo || mode.sinceMs === null) return;
+    const now = Date.now();
+    if (now - mode.sinceMs < 60_000) {
+      // Under a minute: nothing worth logging. Drop the session.
+      const { error } = await createClient().from("pomodoros").delete().eq("id", pomo.id);
+      if (error) return setNotice({ title: "Focus", message: "Couldn't stop the session. Try again." });
+      if (!(await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null }))) {
+        setPomo(null);
+        router.refresh();
+        setNotice({ title: "Focus", message: "Stopped before one minute, so nothing was logged." });
+      }
+      return;
+    }
+    setPomoEnd({ endMs: now, completed: false });
+  }
+
+  // End popup saved: Study entry + the pomodoros row, then back to normal tracking after the entry.
+  async function savePomodoro(result: PomodoroResult): Promise<string | null> {
+    if (!pomo || !pomoEnd || mode.sinceMs === null) return null;
+    const studyCat = categories.find((c) => c.kind === "study");
+    if (!studyCat) return "You don't have a Study category. Add one in Settings, then try again.";
+    const supabase = createClient();
+    const span = pomodoroSpan({ startedMs: mode.sinceMs, endedMs: pomoEnd.endMs, lastEndMs });
+    let entryId: string | null = null;
+    if (span) {
+      const { data, error } = await supabase
+        .from("entries")
+        .insert({
+          category_id: studyCat.id,
+          start_at: new Date(span.startMs).toISOString(),
+          end_at: new Date(span.endMs).toISOString(),
+          source: "pomodoro",
+          subject_id: pomo.subjectId,
+          focus: result.focus,
+          phone_checks: result.phoneChecks,
+          answers: {},
+        })
+        .select("id")
+        .single();
+      if (error || !data) {
+        return error?.code === "23P01"
+          ? "Part of this time already has an entry. Reload the page and try again."
+          : "Couldn't save. Check your connection and try again.";
+      }
+      entryId = data.id;
+    }
+    const { error: rowError } = await supabase
+      .from("pomodoros")
+      .update({ ended_at: new Date(pomoEnd.endMs).toISOString(), completed: result.completed, entry_id: entryId })
+      .eq("id", pomo.id);
+    if (rowError) console.error("Pomodoro row not saved:", rowError.message);
+    const err = await updateStatus({ status: "normal", label: null, sinceMs: null, untilMs: null });
+    if (err) return err;
+    if (span) {
+      setLastEndMs(span.endMs);
+      setSlotStart(span.endMs); // the next check-in starts right after the session
+      setLastEntry({ categoryId: studyCat.id, answers: lastAnswers[studyCat.id] ?? {} });
+    }
+    setLastPrompt(null);
+    missedInARow.current = 0;
+    setPomo(null);
+    setPomoEnd(null);
+    router.refresh();
+    const minutes = span ? (span.endMs - span.startMs) / 60_000 : 0;
+    emitCoach(
+      () => ({ type: "pomodoro", focus: result.focus, phoneChecks: result.phoneChecks, completed: result.completed, minutes, subject: mode.label ?? "Study" }),
+      minutes,
+    );
+    return null;
+  }
+
+  useEffect(() => {
+    return onPomodoro((c) => {
+      if (c.type === "start") void startPomodoro(c.request);
+      else void stopPomodoro();
+    });
+  });
+
+  // ---- Coach (PLAN §12): an event happened -> maybe one message ----
+  // Events are handled one after another so two quick saves can't both show the same message.
+  function emitCoach(makeEvent: (triggerWeek: Record<string, number>) => CoachEvent, studyAddedMin = 0, triggers: string[] = []) {
+    coachChain.current = coachChain.current.then(async () => {
+      try {
+        const supabase = createClient();
+        const nowMs = Date.now();
+        const { facts, triggerWeek } = await loadCoachFacts(
+          supabase,
+          { timezone: timeZone, day_start_hour: dayStartHour, weekday_goal_min: props.weekdayGoalMin, weekend_goal_min: props.weekendGoalMin },
+          props.sleepStarts,
+          nowMs,
+          studyAddedMin,
+          triggers,
+        );
+        const picked = pick(candidatesFor(makeEvent(triggerWeek), facts), shownMessages.current, nowMs, props.strictness);
+        if (!picked) return;
+        const { data, error } = await supabase
+          .from("coach_messages")
+          .insert({ rule_key: picked.rule, severity: picked.severity, text: picked.text })
+          .select("id")
+          .single();
+        if (error || !data) return console.error("Coach message not saved:", error?.message);
+        shownMessages.current = [{ rule: picked.rule, severity: picked.severity, createdMs: nowMs }, ...shownMessages.current];
+        setToast({ id: data.id, rule: picked.rule, severity: picked.severity, text: picked.text });
+        let last: number | null = null;
+        try {
+          last = Number(localStorage.getItem("hh-coach-notified")) || null;
+        } catch {
+          // no storage: treat as never notified
+        }
+        if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted" && canNotify(picked.rule, last, nowMs)) {
+          const n = new Notification("Honest Hours", { body: picked.text, tag: "hh-coach" });
+          n.onclick = () => window.focus();
+          try {
+            localStorage.setItem("hh-coach-notified", String(nowMs));
+          } catch {
+            // ignore
+          }
+        }
+        router.refresh();
+      } catch (e) {
+        console.error("Coach failed:", e);
+      }
+    });
+  }
+
+  // A pomodoro started within 10 minutes of a message counts as acting on it (shows which nudges work).
+  function markActedOn() {
+    void createClient()
+      .from("coach_messages")
+      .update({ acted_on: true })
+      .eq("acted_on", false)
+      .gt("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
+      .then(({ error }) => error && console.error("acted_on not saved:", error.message));
+  }
+
+  // ---- Evening review (PLAN §4.10) ----
+  const offeredKey = (date: string) => `hh-review-offered:${date}`;
+  const wasOffered = (date: string) => {
+    try {
+      return localStorage.getItem(offeredKey(date)) !== null;
+    } catch {
+      return false;
+    }
+  };
+
+  async function openReview(thenSleep: boolean) {
+    reviewOpen.current = true;
+    const nowMs = Date.now();
+    const day = dayOf(nowMs, timeZone, dayStartHour);
+    try {
+      localStorage.setItem(offeredKey(day.date), "1"); // never offered twice in a day
+    } catch {
+      // private mode: the review may be offered again after a reload
+    }
+    setReview({ summary: null, currentGoal: null, thenSleep });
+    const supabase = createClient();
+    const tomorrow = dayOf(day.endMs, timeZone, dayStartHour);
+    const [rows, cats, log, next] = await Promise.all([
+      supabase
+        .from("entries")
+        .select("category_id, start_at, end_at, planned, focus, phone_checks")
+        .lt("start_at", new Date(day.endMs).toISOString())
+        .gt("end_at", new Date(day.startMs).toISOString()),
+      supabase.from("categories").select("id, kind, value"),
+      supabase.from("day_logs").select("study_goal_min, planned_study_min").eq("day", day.date).maybeSingle(),
+      supabase.from("day_logs").select("tomorrow_goal").eq("day", tomorrow.date).maybeSingle(),
+    ]);
+    if (!rows.data || !cats.data) {
+      setReview(null);
+      if (thenSleep) sleepNow();
+      return;
+    }
+    const byId = new Map(cats.data.map((c) => [c.id, c]));
+    const entries: InsightEntry[] = rows.data.flatMap((r) => {
+      const c = byId.get(r.category_id);
+      return c
+        ? [
+            {
+              categoryId: r.category_id,
+              startMs: Date.parse(r.start_at),
+              endMs: Date.parse(r.end_at),
+              kind: c.kind as InsightEntry["kind"],
+              value: c.value as InsightEntry["value"],
+              planned: r.planned,
+            },
+          ]
+        : [];
+    });
+    const goalMin = log.data?.study_goal_min ?? (day.dayType === "weekend" ? props.weekendGoalMin : props.weekdayGoalMin);
+    const s = computeToday({ entries, day, nowMs, goalMin, usualSleepMs: nowMs });
+    const scoreEntries: ScoreEntry[] = rows.data.flatMap((r) => {
+      const c = byId.get(r.category_id);
+      return c
+        ? [{ kind: c.kind as ScoreEntry["kind"], startMs: Date.parse(r.start_at), endMs: Date.parse(r.end_at), planned: r.planned, focus: r.focus, phoneChecks: r.phone_checks }]
+        : [];
+    });
+    const to = Math.min(day.endMs, nowMs);
+    setReview({
+      summary: {
+        studyMin: s.studyMin,
+        goalMin,
+        wastedMin: s.wastedMin,
+        wastedSessions: s.wastedSessions,
+        plannedMin: log.data?.planned_study_min ?? null,
+        trackedPct: s.trackedPct,
+        unknownMin: s.unknownMin,
+        focusScore: focusScore(scoreEntries, day.startMs, to),
+        disciplineScore: disciplineScore({
+          entries: scoreEntries,
+          fromMs: day.startMs,
+          toMs: to,
+          plannedStudyMin: log.data?.planned_study_min ?? null,
+          goalMin,
+          goalHit: s.studyMin >= goalMin ? 1 : 0,
+        }),
+      },
+      currentGoal: next.data?.tomorrow_goal ?? null,
+      thenSleep,
+    });
+    emitCoach(() => ({ type: "review", auto: !thenSleep }));
+  }
+
+  function sleepNow() {
+    const since = floorToMinute(Date.now());
+    void updateStatus({ status: "sleeping", label: null, sinceMs: since, untilMs: null }).then((err) => {
+      if (!err) emitCoach(() => ({ type: "sleep", timeLabel: formatClock(since, timeZone) }));
+    });
+  }
+
+  function closeReview() {
+    const thenSleep = review?.thenSleep;
+    setReview(null);
+    if (thenSleep) sleepNow();
+  }
+
+  async function saveReview(goalText: string): Promise<string | null> {
+    const supabase = createClient();
+    const day = dayOf(Date.now(), timeZone, dayStartHour);
+    const tomorrow = dayOf(day.endMs, timeZone, dayStartHour);
+    const goalFor = (type: string) => (type === "weekend" ? props.weekendGoalMin : props.weekdayGoalMin);
+    const upsert = async (date: string, type: string, fields: { review_done?: boolean; tomorrow_goal?: string }) => {
+      const found = await supabase.from("day_logs").select("day").eq("day", date).maybeSingle();
+      if (found.error) return found.error;
+      const res = found.data
+        ? await supabase.from("day_logs").update(fields).eq("day", date)
+        : await supabase.from("day_logs").insert({ day: date, study_goal_min: goalFor(type), ...fields });
+      return res.error;
+    };
+    const goal = cleanGoal(goalText);
+    const err = await upsert(day.date, day.dayType, { review_done: true });
+    if (err) return "Couldn't save the review. Check your connection and try again.";
+    if (goal) {
+      const goalErr = await upsert(tomorrow.date, tomorrow.dayType, { tomorrow_goal: goal });
+      if (goalErr) return "Saved the review, but not tomorrow's goal. Try again.";
+    }
+    setReviewSaved(true);
+    router.refresh();
+    closeReview();
+    return null;
+  }
+
+  // Offer the review ~30 min before usual sleep (once a day).
+  useEffect(() => {
+    if (!active || prompt || pomoEnd) return;
+    const check = () => {
+      const now = Date.now();
+      const day = dayOf(now, timeZone, dayStartHour);
+      const sleepAt = usualSleepMs(props.sleepStarts, day, timeZone, dayStartHour);
+      if (promptOpen.current || reviewOpen.current) return;
+      if (
+        reviewDue({
+          nowMs: now,
+          usualSleepMs: sleepAt,
+          dayEndMs: day.endMs,
+          done: props.reviewDone || reviewSaved,
+          offered: wasOffered(day.date),
+        })
+      )
+        void openReview(false);
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openReview only uses stable props
+  }, [active, prompt, pomoEnd, props.sleepStarts, props.reviewDone, reviewSaved, timeZone, dayStartHour]);
 
   // One tap: write the routine (e.g. Office day) for today as entries. Parts of the routine that
   // overlap something already logged are cut out, and the part still in the future is not logged.
@@ -349,7 +759,10 @@ export function CheckinController(props: Props) {
       if (command === "busy" && !prompt && mode.status === "normal") setBusyOpen(true);
       if (command === "end-busy" && mode.status === "busy") endBusy();
       if (command === "sleep" && !prompt && mode.status === "normal") {
-        updateStatus({ status: "sleeping", label: null, sinceMs: floorToMinute(Date.now()), untilMs: null });
+        // The review is offered once a day; skipping it never blocks sleep.
+        const day = dayOf(Date.now(), timeZone, dayStartHour);
+        if (props.reviewDone || reviewSaved || wasOffered(day.date)) sleepNow();
+        else void openReview(true);
       }
       if (command === "awake" && mode.status === "sleeping") setWakeOpen(true);
       if (command === "routine" && !prompt && mode.status === "normal") runRoutine();
@@ -366,7 +779,7 @@ export function CheckinController(props: Props) {
       off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateStatus only uses stable props
-  }, [prompt, mode.status, openPrompt, endBusy]);
+  }, [prompt, mode.status, openPrompt, endBusy, reviewSaved, props.reviewDone]);
 
   async function startBusy(choice: BusyChoice, label: string): Promise<string | null> {
     const now = Date.now();
@@ -428,11 +841,12 @@ export function CheckinController(props: Props) {
       wake_at: new Date(endMs).toISOString(),
       sleep_quality: input.quality,
       planned_study_min: input.planMin,
+      tomorrow_goal: input.goal ? cleanGoal(input.goal) : null,
     };
     // The first wake of the day wins: a later "I'm awake" (after a nap) must not replace the morning wake time or plan.
     const existing = await supabase
       .from("day_logs")
-      .select("wake_at, sleep_quality, planned_study_min")
+      .select("wake_at, sleep_quality, planned_study_min, tomorrow_goal")
       .eq("day", day.date)
       .maybeSingle();
     const logResult = existing.data
@@ -446,6 +860,15 @@ export function CheckinController(props: Props) {
       if (err) return err;
     }
     if (endMs - sleepStart >= 60_000) setLastEndMs(endMs);
+    const wakeParts = localParts(endMs, timeZone);
+    emitCoach(() => ({
+      type: "awake",
+      wakeHour: wakeParts.hour + wakeParts.minute / 60,
+      quality: input.quality,
+      planMin: input.planMin,
+      sleepMin: endMs - sleepStart >= 60_000 ? (endMs - sleepStart) / 60_000 : null,
+      timeLabel: formatClock(endMs, timeZone),
+    }));
     setSlotStart(endMs);
     setGapSince(null);
     setLastPrompt(null);
@@ -491,6 +914,24 @@ export function CheckinController(props: Props) {
     ]);
     secondary.forEach((r) => r?.error && console.error("Check-in extras not saved:", r.error.message));
     router.refresh();
+    const savedEntries: SavedEntry[] = parts.map((p, i) => {
+      const cat = categories.find((c) => c.id === p.categoryId);
+      const row = rows[i] as { planned?: boolean | null; trigger?: string | null };
+      return {
+        categoryName: cat?.name ?? "",
+        kind: cat?.kind ?? "",
+        minutes: (spans[i].endMs - spans[i].startMs) / 60_000,
+        value: cat?.value ?? "neutral",
+        planned: row.planned ?? null,
+        trigger: row.trigger ?? null,
+        triggerWeek: 0,
+      };
+    });
+    emitCoach(
+      (tw) => ({ type: "checkin", saved: savedEntries.map((e) => ({ ...e, triggerWeek: e.trigger ? (tw[e.trigger] ?? 0) : 0 })) }),
+      savedEntries.filter((e) => e.kind === "study").reduce((m, e) => m + e.minutes, 0),
+      savedEntries.flatMap((e) => (e.trigger ? [e.trigger] : [])),
+    );
 
     const lastPart = parts[parts.length - 1];
     setLastEntry({ categoryId: lastPart.categoryId, answers: lastPart.answers });
@@ -532,6 +973,7 @@ export function CheckinController(props: Props) {
           onSkip={skip}
         />
       )}
+      <CoachToast message={toast} onClose={() => setToast(null)} />
       {notice && <NoticeModal title={notice.title} message={notice.message} onClose={() => setNotice(null)} />}
       {prompt && !prompt.office && (
         <CheckinModal
@@ -550,6 +992,26 @@ export function CheckinController(props: Props) {
           onSkip={skip}
         />
       )}
+      {pomoEnd && pomo && mode.status === "pomodoro" && mode.sinceMs !== null && (
+        <PomodoroEndModal
+          key={pomo.id}
+          subjectName={mode.label ?? "Study"}
+          startMs={mode.sinceMs}
+          endMs={pomoEnd.endMs}
+          timeZone={timeZone}
+          completed={pomoEnd.completed}
+          onSave={savePomodoro}
+        />
+      )}
+      {review && (
+        <ReviewModal
+          summary={review.summary}
+          currentGoal={review.currentGoal}
+          confirmLabel={review.thenSleep ? "Save & go to sleep" : "Save"}
+          onSave={saveReview}
+          onSkip={closeReview}
+        />
+      )}
       {busyOpen && <BusyModal presets={props.busyPresets} onStart={startBusy} onCancel={() => setBusyOpen(false)} />}
       {wakeOpen && mode.status === "sleeping" && mode.sinceMs !== null && (
         <WakeModal
@@ -559,6 +1021,7 @@ export function CheckinController(props: Props) {
           dayStartHour={dayStartHour}
           weekdayGoalMin={props.weekdayGoalMin}
           weekendGoalMin={props.weekendGoalMin}
+          askGoal={!props.todayGoal}
           onSubmit={wake}
         />
       )}
@@ -572,6 +1035,7 @@ export function CheckinController(props: Props) {
           dayStartHour={dayStartHour}
           weekdayGoalMin={props.weekdayGoalMin}
           weekendGoalMin={props.weekendGoalMin}
+          askGoal={!props.todayGoal}
           onSubmit={wake}
         />
       )}

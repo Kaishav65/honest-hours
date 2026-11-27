@@ -2,7 +2,8 @@
 // next check-in, and can send commands, while the check-in controller owns the timer and popups.
 
 export type Mode = {
-  status: "normal" | "busy" | "sleeping";
+  status: "normal" | "busy" | "sleeping" | "pomodoro";
+  /** While a pomodoro runs: the subject name. */
   label: string | null;
   sinceMs: number | null;
   untilMs: number | null;
@@ -55,6 +56,18 @@ export function onCommand(fn: (command: Command) => void) {
   const handler = (e: Event) => fn((e as CustomEvent<Command>).detail);
   window.addEventListener(EVENT, handler);
   return () => window.removeEventListener(EVENT, handler);
+}
+
+// The Focus page asks the controller (which owns the timer and the popups) to start or stop a pomodoro.
+export type PomodoroRequest = { subjectId: string; subjectName: string; minutes: number };
+type PomodoroCommand = { type: "start"; request: PomodoroRequest } | { type: "stop" };
+const POMO_EVENT = "hh:pomodoro";
+export const sendPomodoro = (command: PomodoroCommand) =>
+  window.dispatchEvent(new CustomEvent<PomodoroCommand>(POMO_EVENT, { detail: command }));
+export function onPomodoro(fn: (command: PomodoroCommand) => void) {
+  const handler = (e: Event) => fn((e as CustomEvent<PomodoroCommand>).detail);
+  window.addEventListener(POMO_EVENT, handler);
+  return () => window.removeEventListener(POMO_EVENT, handler);
 }
 
 export function formatClock(ms: number, timeZone: string) {

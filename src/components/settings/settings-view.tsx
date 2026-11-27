@@ -4,14 +4,18 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccountTab } from "./account-tab";
 import { CategoriesTab } from "./categories-tab";
+import { CoachTab } from "./coach-tab";
 import { PresetsTab } from "./presets-tab";
 import { ScheduleTab } from "./schedule-tab";
+import { StreakTab } from "./streak-tab";
 import type { SettingsCategory, SettingsProfile, SettingsQuestion } from "./types";
 
 const TABS = [
   { id: "categories", label: "Categories & questions" },
   { id: "schedule", label: "Popups & schedule" },
   { id: "presets", label: "Busy presets" },
+  { id: "streak", label: "Streak & goals" },
+  { id: "coach", label: "Coach" },
   { id: "account", label: "Account" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -40,6 +44,8 @@ export function SettingsView({ profile, categories, questions }: Props) {
         {tab === "categories" && <CategoriesTab categories={categories} questions={questions} onChanged={refresh} />}
         {tab === "schedule" && <ScheduleTab profile={profile} onChanged={refresh} />}
         {tab === "presets" && <PresetsTab profile={profile} onChanged={refresh} />}
+        {tab === "streak" && <StreakTab profile={profile} onChanged={refresh} />}
+        {tab === "coach" && <CoachTab profile={profile} onChanged={refresh} />}
         {tab === "account" && <AccountTab profile={profile} onChanged={refresh} />}
       </div>
     </section>

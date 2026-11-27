@@ -32,6 +32,7 @@ export type SettingsProfile = {
   checkinIntervalMin: number;
   weekdayGoalMin: number;
   weekendGoalMin: number;
+  coachStrictness: "gentle" | "balanced" | "strict";
   /** profiles.settings, kept whole so saving one part never drops another. */
   settings: Record<string, unknown>;
 };

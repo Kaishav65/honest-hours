@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, CircleCheck, Flame, Gauge, Hourglass, House, Smartphone, Sprout, TriangleAlert } from "lucide-react";
+import { ArrowRight, CircleCheck, Flame, Gauge, Hourglass, House, Play, Smartphone, Sprout, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type CSSProperties, type ReactNode } from "react";
@@ -8,11 +8,15 @@ import type { CategoryKind } from "@/lib/checkin/types";
 import { formatClock } from "@/lib/checkin/store";
 import { computeStreak, ON_TRACK_MIN_DAYS, onTrack, restOfDaySamples } from "@/lib/insights/streak";
 import { loadStudyHistory } from "@/lib/insights/study-history";
+import { disciplineScore, focusScore, type ScoreEntry } from "@/lib/insights/scores";
 import { computeToday, usualSleepMs, type InsightEntry } from "@/lib/insights/today";
 import { createClient } from "@/lib/supabase/server";
 import { dayOf, localParts } from "@/lib/time";
 import { buildBlocks } from "@/lib/time/blocks";
 import { DayRibbon, type RibbonBlock } from "@/components/timeline/day-ribbon";
+import { CoachHistory } from "@/components/coach/coach-history";
+import { CoachMessage } from "@/components/coach/coach-message";
+import { streakAtRiskNudge } from "@/lib/coach/nudges";
 
 export default function TodayPage() {
   return (
@@ -60,7 +64,7 @@ async function TodayData() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, timezone, day_start_hour, weekday_goal_min, weekend_goal_min")
+    .select("display_name, timezone, day_start_hour, weekday_goal_min, weekend_goal_min, coach_strictness")
     .eq("id", userId)
     .single();
   if (!profile) return null;
@@ -76,14 +80,14 @@ async function TodayData() {
   if (!cats) return null;
   const sleepIds = cats.filter((c) => c.kind === "sleep").map((c) => c.id);
 
-  const [rows, log, sleeps, hist] = await Promise.all([
+  const [rows, log, sleeps, hist, coach] = await Promise.all([
     supabase
       .from("entries")
-      .select("id, category_id, start_at, end_at, source, planned")
+      .select("id, category_id, start_at, end_at, source, planned, focus, phone_checks")
       .lt("start_at", new Date(day.endMs).toISOString())
       .gt("end_at", new Date(day.startMs).toISOString())
       .order("start_at"),
-    supabase.from("day_logs").select("study_goal_min, planned_study_min").eq("day", day.date).maybeSingle(),
+    supabase.from("day_logs").select("study_goal_min, planned_study_min, tomorrow_goal").eq("day", day.date).maybeSingle(),
     sleepIds.length
       ? supabase
           .from("entries")
@@ -92,6 +96,7 @@ async function TodayData() {
           .gte("start_at", new Date(nowMs - 14 * 24 * 60 * MIN).toISOString())
       : Promise.resolve({ data: [] as { start_at: string }[] }),
     loadStudyHistory(supabase, profile, nowMs),
+    supabase.from("coach_messages").select("id, severity, text, created_at").order("created_at", { ascending: false }).limit(100),
   ]);
   if (!rows.data) return null;
   const entryIds = rows.data.map((r) => r.id);
@@ -122,6 +127,22 @@ async function TodayData() {
   const sleepAt = usualSleepMs((sleeps.data ?? []).map((s) => Date.parse(s.start_at)), day, tz, startHour);
   const s = computeToday({ entries, day, nowMs, goalMin, usualSleepMs: sleepAt });
   const streak = computeStreak(hist.history);
+  const scoreEntries: ScoreEntry[] = rows.data.flatMap((r) => {
+    const c = byId.get(r.category_id);
+    return c
+      ? [{ kind: c.kind as CategoryKind, startMs: Date.parse(r.start_at), endMs: Date.parse(r.end_at), planned: r.planned, focus: r.focus, phoneChecks: r.phone_checks }]
+      : [];
+  });
+  const scoreTo = Math.min(day.endMs, nowMs);
+  const focus = focusScore(scoreEntries, day.startMs, scoreTo);
+  const discipline = disciplineScore({
+    entries: scoreEntries,
+    fromMs: day.startMs,
+    toMs: scoreTo,
+    plannedStudyMin: log.data?.planned_study_min ?? null,
+    goalMin,
+    goalHit: s.studyMin >= goalMin ? 1 : 0,
+  });
   const track = onTrack(s.studyMin, goalMin, restOfDaySamples(hist.history, day, nowMs, hist.study));
 
   // "While doing" (e.g. YouTube during Dinner): the main entry owns the time, so tags are reported, never added.
@@ -171,6 +192,22 @@ async function TodayData() {
   // A usual bedtime after the day's end (e.g. 3:25 AM) sits at the ribbon's right edge.
   const usualSleepOffset = Math.round((Math.min(sleepAt, day.endMs) - day.startMs) / MIN);
   const maxCat = s.byCategory[0]?.min ?? 1;
+  const nudge = streakAtRiskNudge({
+    streakDays: streak.streak,
+    studyMin: s.studyMin,
+    goalMin,
+    freeLeftMin: s.freeLeftMin,
+    usualSleepLabel: formatClock(sleepAt, tz),
+    localHour: localParts(nowMs, tz).hour,
+  });
+  const when = (iso: string) => {
+    const ms = Date.parse(iso);
+    return ms >= day.startMs && ms < day.endMs
+      ? formatClock(ms, tz)
+      : new Intl.DateTimeFormat("en-IN", { timeZone: tz, day: "numeric", month: "short" }).format(ms) + ", " + formatClock(ms, tz);
+  };
+  const coachItems = (coach.data ?? []).map((m) => ({ id: m.id, severity: m.severity, text: m.text, when: when(m.created_at) }));
+  const strictnessLabel = profile.coach_strictness.charAt(0).toUpperCase() + profile.coach_strictness.slice(1);
 
   const freeParts: { kind: CategoryKind; label: string; min: number }[] = [
     { kind: "study", label: "Study", min: s.studyMin },
@@ -202,6 +239,17 @@ async function TodayData() {
             {greeting(localParts(nowMs, tz).hour)}, {profile.display_name}. {em}
           </h1>
         </div>
+        <span className="spacer" />
+        {log.data?.tomorrow_goal && (
+          <div className="note">
+            <small>Today&apos;s one goal</small>
+            {log.data.tomorrow_goal}
+          </div>
+        )}
+        <Link href="/focus" className="btn btn-soft">
+          <Play className="lucide" aria-hidden />
+          Start a pomodoro
+        </Link>
       </div>
 
       <article className="card tile tile-goal">
@@ -343,6 +391,26 @@ async function TodayData() {
         </div>
       </article>
 
+      <article className="card coach-card">
+        <div className="card-head">
+          <h2 className="card-title">Coach</h2>
+          <span className="badge" title="How direct the coach is (Settings)">{strictnessLabel}</span>
+          <span className="spacer" />
+          <CoachHistory items={coachItems} />
+        </div>
+        <div className="scroll coach-list">
+          {nudge && <CoachMessage severity="info" text={nudge} time="live" />}
+          {coachItems.slice(0, 8).map((m) => (
+            <CoachMessage key={m.id} severity={m.severity} text={m.text} time={m.when} />
+          ))}
+          {!nudge && coachItems.length === 0 && (
+            <p className="sm muted">
+              Nothing yet. The coach speaks when something happens: a check-in, a pomodoro, waking up.
+            </p>
+          )}
+        </div>
+      </article>
+
       <article className="card where-card">
         <div className="card-head">
           <h2 className="card-title">Where time went</h2>
@@ -374,6 +442,20 @@ async function TodayData() {
             </div>
           )}
           {s.byCategory.length === 0 && s.unknownMin < 1 && <p className="sm muted">Nothing logged yet today.</p>}
+        </div>
+        <div className="scores" data-testid="scores">
+          <span
+            className={`badge ${focus === null ? "" : "badge-info"}`}
+            title={focus === null ? "Rate your focus after a pomodoro to get a focus score" : "Average focus (1–5) weighted by minutes, minus a penalty for phone checks"}
+          >
+            Focus {focus ?? "—"}
+          </span>
+          <span
+            className={`badge ${discipline === null ? "" : "badge-info"}`}
+            title="Plan kept 50% · planned fun 30% · goal hit 20%"
+          >
+            Discipline {discipline ?? "—"}
+          </span>
         </div>
         {whileDoingText && (
           <div className="xs muted while-doing">
