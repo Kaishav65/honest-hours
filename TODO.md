@@ -2,9 +2,9 @@
 
 > **Start here in every new session.** This file tracks what's done and what's next.
 > The full design is in [PLAN.md](PLAN.md) (features §4, screens §9, database §10, calculations §11, coach §12).
-> Last updated: 2026-11-27 (polish: tablet-responsive layout — see "Polish: tablet-responsive layout")
+> Last updated: 2026-11-27 (decisions: Step 21 + CSV export on hold; user confirmed PWA, Step 3, Step 10, dark mode; full dummy-user test pass in progress)
 
-**Current status:** v1 steps 0–2 and 4 done; Steps 3 and 5–10 are coded, smoke-tested in a real browser (Chrome via Playwright) and in daily use since 2026-11-21. Step 11: PWA + Vercel deploy done (deploy reported by the user, not checked in this session); installing the PWA from the live URL still to confirm. v2 started: Steps 12–20 done (Step 20 = Settings extras). **Next: v2 Step 21 — Look: Clean / Notebook** (the last v2 step) (v2 is broken into Steps 12–21 under "Later").
+**Current status:** v1 and v2 Steps 12–20 are built and in daily use. PWA install, Step 3, Step 10 and dark mode confirmed by the user (2026-11-27). **On hold (user decision 2026-11-27): v2 Step 21 (Look: Clean / Notebook) and v3 CSV export.** Still wanted: v3 "Usually next", pattern insights, subject goals / forecasts, and the optional items (email password reset, Google sign-in, Hinglish coach messages). A dummy-user browser test pass of everything else that was unconfirmed is recorded under "Automated verification 2026-11-27".
 
 ---
 
@@ -60,7 +60,7 @@ Each step has a check that proves it works.
 - [x] Logged-out users → `/login`; logged-in users on `/login` → `/today`
 - [x] Sidebar shows display name + avatar initial; Log out button
 - Verified so far: lint + build pass; logged-out `/today` and `/` → `/login`; db-test passes after removing invite codes
-- **Still to check by hand:** sign-up creates account + defaults; logout → `/login`; logged-in `/login` → `/today`
+- **Confirmed by the user (2026-11-27):** Step 3 works (sign-up, logout, redirects), and dark mode works across the app (so "dark mode not checked" notes below are closed).
 - **Check:** sign-up creates account + defaults; logout → redirected to `/login`
 
 ### Step 4 — Time logic (`src/lib/time/`) ✅
@@ -131,7 +131,7 @@ Each step has a check that proves it works.
 - [x] **Account:** display name (1–20), change password (re-checks the current password first), theme Light / Dark / Match my computer
 - All saves go straight to Supabase from the browser (RLS keeps them to your own rows) and then refresh the page data, so popups and other pages see the change; `profiles.settings` is saved whole so nothing is dropped
 - Verified: lint + build; browser test (Chrome via Playwright): new category + question shows up in the L popup and saves; duplicate name rejected; interval 15 / weekend goal 5 h saved (Today shows 12 pomodoros = 300 ÷ 25); preset saved and listed in Busy; name change shows in the greeting; wrong current password rejected, right one changes it; dark theme applies; DB values checked, test users deleted
-- **Still to check by hand:** archive a category (disappears from the popup, still shows on old entries); weekend office hours really switch the popup to 2-hourly; editing an existing question; long category lists scroll inside the panel
+- **Confirmed by the user (2026-11-27):** Step 10 Settings works. (Edge cases earlier listed as unchecked — archive, weekend office hours, question edit, long lists — are also re-tested with a dummy user, see "Automated verification 2026-11-27".)
 - [x] Social apps are separate categories (2026-11-24): migration `20261124000000_social_apps_and_exercise.sql` — Instagram / TikTok / Facebook / Snapchat (entertainment, waste, built-in Planned? / Why? / Mood after), Walking + Swimming (rest, neutral, new `waves` icon); sign-up defaults updated and existing users backfilled; "Social Media" renamed back to Instagram. New Entertainment categories made in Settings now get the three built-in questions automatically (hand-added "Planned?" has no `system_key`, so it wouldn't feed "wasted today"). Reading (rest, productive, "What are you reading?") added by `20261124120000_reading_category.sql`; New category form now explains each kind and warns on odd kind + "Counts as" combos. **Migrations still to be applied:** `npx supabase db push --db-url "$SUPABASE_DB_URL" --yes`
 - (2026-11-27: the weekday/weekend goal inputs moved from Popups & schedule to the Streak & goals tab, see Step 17.)
 - (2026-11-27: kind is now editable, questions can be renamed and "Delete my account" exists — see Step 20.) Old limits: kind can't be changed after creating a category (scores depend on it); question labels can't be renamed (remove and re-add); no "Delete my account" yet; Look (Clean / Notebook) is v2; timezone is shown but not editable; no coach / streak / strictness settings until v2
@@ -139,7 +139,7 @@ Each step has a check that proves it works.
 ### Step 11 — Install & deploy
 - [x] PWA manifest + icons (installs as its own window): Sprout-on-sage icon (tab, home screen, installed app), `src/app/manifest.ts`, page titles on every page; manifest/icons are public in `src/proxy.ts`. Verified: build + 57 tests; manifest and icons return 200 when logged out
 - [x] Deploy to Vercel with env vars (done by the user; running)
-- **Check:** installs from the live URL and works end to end — install as PWA from the live URL not yet confirmed
+- **Check:** installs from the live URL and works end to end — **confirmed by the user (2026-11-27): PWA works.**
 
 ---
 
@@ -290,18 +290,26 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Verified:** tsc + eslint, 143 unit tests (nothing new to unit-test here; the wording logic is covered in Step 15). Browser test (Chrome via Playwright, throwaway user, faked 7 PM clock): the three tones show different text with the numbers; Strict saves to `profiles.coach_strictness`; the next real check-in (Instagram, unplanned) produced the **Strict** drift_1 wording; changing Reading's kind to Study shows the warning and writes `kind = 'study'`; renaming "Planned?" to "Was it planned?" keeps `system_key = 'planned'`; the delete button is disabled until `DELETE` is typed exactly (lower-case isn't enough); deleting redirects to `/login`, the old credentials are refused (400), `/today` redirects to `/login`, and a SQL check shows **0 rows** for that user id in `auth.users`, `profiles`, `entries`, `categories`, `category_questions`, `coach_messages`, `checkins`, `day_logs`, `routines`.
 - **Not verified / known limits:** the only console line was the 403 from the sign-out call after deleting (expected, see Decision 2); deleting while a pomodoro or busy status is running isn't special-cased (all rows go anyway); there is no "export my data first" (CSV export is v3); the kind change was not followed by a look at Today/Insights to see the recount (the numbers are computed live, so they follow); Gentle was checked as wording only (Strict end-to-end).
 
-#### Step 21 — Look: Clean / Notebook (§9 "Two looks")
+#### Step 21 — Look: Clean / Notebook (§9 "Two looks") — ⏸ ON HOLD (user decision, 2026-11-27)
 - [ ] Load the Notebook fonts with `next/font`; port `design-system-v2` tokens scoped under `[data-look="notebook"]`
 - [ ] Set `data-look` before first paint (same script as the theme), saved in localStorage
 - [ ] Settings → Look toggle
 - **Check:** every page in 4 combinations (Clean/Notebook × light/dark), Notebook at 1366×768 first; no page scroll
 
+#### Extra — About page (2026-11-27, user request, not in PLAN) ✅ (code done, browser-tested)
+- [x] New sidebar item **About** (below Settings, key `7`) → `/about`: one-line pitch, **Install as app** card (strongly recommended), How it works (3 steps), The pages (with keys 1–7), Buttons in the top bar, Best way to use it (10 tips), Common questions (6)
+- **Done:** `src/app/(app)/about/page.tsx` (static server page, scrolls inside `.scroll`), `src/components/about/install-card.tsx` (client: native "Install now" button when the browser offers `beforeinstallprompt`, always shows the by-hand steps for Chrome/Edge, Android, iPhone Safari; turns into a green "You're using the installed app" when already in standalone mode), `nav-items.ts` (About + `Info` icon; the 1–N shortcuts follow the list, so key 7 needed no other change), `sidebar.tsx` (comment only).
+- **Decisions:** (1) Plain content page with no database reads, so no Suspense/`connection()`. (2) Install steps are always listed (no browser sniffing); only "installed already" and "native prompt available" are detected. (3) The FAQ says popups only work while the app/tab is open — that is true of the current design (timers run in the page), so it's stated plainly instead of implying background reminders. (4) Used existing card / badge / kbd classes, no new CSS.
+- **Verified:** tsc + eslint clean; browser test (Chrome via Playwright, throwaway user, 1366×768): sidebar shows About, page renders all sections, no page scroll, no console errors; the throwaway user was deleted through Settings → Delete my account.
+- **Follow-up edit (same day):** Busy tip and Busy button text now name meetings, interviews, exams, classes, travel. My first save had unescaped `"` inside a JS string (build error); fixed with `\"`, then re-ran tsc + eslint + the browser test (page loads, no console errors, throwaway user deleted). Lesson: re-run the check after every edit, even text-only. Then (user request): cards widened (`maxWidth` 58rem → 76rem) and every step / page / button / tip / FAQ answer got one extra sentence; tsc + eslint + browser test at 1920×1080 (no page scroll, no console errors, test user deleted). Not re-checked at 1366×768 after the widening.
+- **Not verified / known limits:** the native "Install now" button and the installed state (headless Chrome never offers the prompt; needs a real install on the live URL); key `7` shortcut (the test's first attempt was blocked by an open first-run popup, then navigated by URL); dark mode, 1920×1080 and phone width. One earlier test user `about-test-<number>@example.com` from the failed first run is still in Supabase → Authentication → Users and should be deleted by hand.
+
 ### v3 — Deeper insights
 - [ ] "Usually next" smart suggestions
 - [ ] Pattern insights (sleep, wake-up, phone checks)
 - [ ] Subject goals with predicted finish dates, long-term forecasts
-- [ ] CSV export
-- [ ] Optional: email password reset (Resend), Google sign-in, Hinglish coach messages
+- [ ] ⏸ CSV export — ON HOLD (user decision, 2026-11-27)
+- [ ] Optional (kept): email password reset (Resend), Google sign-in, Hinglish coach messages
 
 ---
 

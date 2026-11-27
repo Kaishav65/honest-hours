@@ -23,7 +23,7 @@ export function Sidebar({ footer }: { footer: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Keys 1–6 switch pages (design system §9).
+  // Keys 1–7 switch pages (design system §9).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
