@@ -248,10 +248,6 @@ async function TodayData() {
             {log.data.tomorrow_goal}
           </div>
         )}
-        <Link href="/focus" className="btn btn-soft">
-          <Play className="lucide" aria-hidden />
-          Start a pomodoro
-        </Link>
       </div>
 
       <article className="card tile tile-goal">
@@ -339,8 +335,14 @@ async function TodayData() {
             <span key={i} className={i < s.pomodorosNeeded ? "pip need" : "pip"} />
           ))}
         </div>
-        <div className="sm ink2">
-          <b>{s.pomodorosNeeded}</b> needed of <b>{s.pomodorosPossible}</b> possible pomodoros
+        <div className="sm ink2" style={{ display: "flex", alignItems: "center", gap: ".5rem", justifyContent: "space-between" }}>
+          <span>
+            <b>{s.pomodorosNeeded}</b> needed of <b>{s.pomodorosPossible}</b> possible
+          </span>
+          <Link href="/focus" className="btn btn-soft btn-sm">
+            <Play className="lucide" aria-hidden />
+            Start
+          </Link>
         </div>
       </article>
 

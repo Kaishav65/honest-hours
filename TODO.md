@@ -331,3 +331,15 @@ Don't delete old records. If a later step changes an earlier decision, add a not
 - **Verified:** `tsc --noEmit` clean; Playwright (real account, read-only, nothing written): chip is green with the `pulse` animation, "in 8 min" shows, one `.blk.live` with the `live-hatch` animation, marker reads "Now 10:06 AM", sleep button is bordered secondary. Screenshot looked right.
 - **Not verified:** dark theme. The Now label time is server-rendered, so it updates on refresh/navigation, not every second.
 - **Fix (same day): ribbon sweep was invisible.** Cause: the sweep was a white 35% background layer, and the live block is only ~21px wide and hatched beige, so it barely showed (animation was running, checked via `getAnimations()`). Now `.blk.live::after` slides a brighter highlight band across the block (`components.css`). Verified with Playwright screenshots at 3x: highlight visible in one frame, elsewhere in the next. Dark variant not checked.
+
+### Polish: theme button border + circular theme reveal (2026-11-27)
+- **Done:** theme button is `btn-secondary` (bordered, like the others); clicking it spreads the new theme as a circle from the button's centre over the whole page, 650 ms (`toggleTheme` in `status-bar.tsx`, 3 CSS lines at the end of `components.css`). Skipped when the OS asks for reduced motion or the browser lacks View Transitions.
+- **Decisions:** options were (a) cross-fade (b) circular reveal from the button (c) sweep from one edge. Chose (b): it ties the effect to the button as asked. Used the View Transitions API (no library, takes a snapshot of the page, so no per-element transitions).
+- **Verified:** Playwright, real account (read-only; theme restored to light): border 1px, light → dark → light, mid-animation frame shows the circle growing from the button, end frame fully dark.
+- **Not verified:** Settings → Account theme buttons still switch instantly (no animation); the mid-animation frame I captured was taken while the page was still loading, so it showed an empty page under the circle.
+
+### Polish: Start pomodoro moved into the pips card (2026-11-27)
+- **Done:** removed the "Start a pomodoro" button from the Today header; added a small "Start" button (links to /focus) on the "N needed of M possible" line of the "Free time left" card (`today/page.tsx`). Text shortened to "needed of possible" to fit.
+- **Decisions:** chose the pips card over a status-bar button (suggested to and approved by the user): it's where the pomodoro count is decided. Status bar still shows Focus / Stop early only during a pomodoro.
+- **Verified:** tsc clean; Playwright (real account, read-only): header has no link, card has one "Start" link, it opens /focus; screenshot looks right.
+- **Not verified:** narrow widths (the app's min width is 1280px, only 1440 checked).
